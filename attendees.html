@@ -1,0 +1,1704 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EmGo — Attendees</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styleMobile.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+<style>
+</style>
+</head>
+<body>
+<div id="bgLayer" style="position:fixed;inset:0;z-index:0;pointer-events:none;background-size:cover;background-position:center;opacity:0;transition:opacity .4s;"></div>
+
+<!-- ══════════════════════════════════════════
+     DESKTOP LAYOUT (hidden on mobile via CSS)
+══════════════════════════════════════════════ -->
+<nav>
+  <div class="logo">
+    <div class="logo-mark">EM</div>
+    <div><div class="logo-text">EmGo</div><div class="logo-sub">Event Mapping</div></div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab" onclick="location.href='venue.html'">🗺 Venue</button>
+    <button class="nav-tab" onclick="location.href='schedule.html'">📅 Schedule</button>
+    <button class="nav-tab" onclick="location.href='index.html'">📋 Events</button>
+    <button class="nav-tab" onclick="location.href='map.html'">📍 Map</button>
+    <button class="nav-tab active" onclick="location.href='attendees.html'">👥 Attendees</button>
+  </div>
+  <div class="nav-right">
+    <button class="btn-primary" onclick="openModal('new-event-modal')">＋ New Event</button>
+    <div class="avatar" title="Logged in user" style="cursor:default;">ME</div>
+    <button class="btn-icon" onclick="logout()" title="Logout" style="font-size:15px;">⇥</button>
+  </div>
+</nav>
+
+<div class="main">
+<aside>
+  <div class="sidebar-inner">
+    <div class="sidebar-section">
+      <div class="s-label">My Events</div>
+      <div class="sidebar-search-wrap">
+        <span class="sidebar-search-icon">🔍</span>
+        <input type="text" class="sidebar-search" id="sidebarSearch" placeholder="Search events…" oninput="filterSidebarEvents(this.value)">
+      </div>
+      <div id="sidebarEvList" class="sidebar-ev-list"></div>
+      <button class="btn-add" onclick="openModal('new-event-modal')">＋ Add Event</button>
+    </div>
+    <div class="quick-stats">
+      <div class="s-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Overview</span>
+        <span id="overviewEvName" style="font-size:8px;color:var(--primary-light);font-weight:600;font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;"></span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-item"><span class="stat-lbl">Attendees</span><span class="stat-val success" id="statAttCount">0</span></div>
+        <div class="stat-item"><span class="stat-lbl">Layers</span><span class="stat-val" id="statLayerCount">1</span></div>
+        <div class="stat-item"><span class="stat-lbl">Activities</span><span class="stat-val" id="statActCount">0</span></div>
+        <div class="stat-item"><span class="stat-lbl">Conflicts</span><span class="stat-val danger" id="statConflictCount">0</span></div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="content">
+
+<!-- VENUE panel -->
+<div id="panel-venue" class="panel">
+  <div class="venue-toolbar">
+    <button class="tool-btn active" id="tool-select" onclick="handleSelectBtnClick()" title="V = Select · P = toggle pan">↖ Select</button>
+    <div class="t-sep"></div>
+    <button class="tool-btn" onclick="openModal('custom-shape-modal')">✦ Custom Shape</button>
+    <button class="tool-btn" onclick="openModal('custom-element-modal')">🖼 Custom Element</button>
+    <div class="t-sep"></div>
+    <div class="zoom-group">
+      <button class="zoom-btn" onclick="zoomOut()">−</button>
+      <span class="zoom-label" id="zoomLabel">100%</span>
+      <button class="zoom-btn" onclick="zoomIn()">＋</button>
+    </div>
+    <button class="tool-btn" onclick="zoomFit()">⊡ Fit</button>
+    <div class="t-sep"></div>
+    <button class="tool-btn danger" onclick="clearCanvas()">🗑 Clear</button>
+    <button class="tool-btn" onclick="exportLayout()">⬇ Export</button>
+    <div class="t-sep"></div>
+    <button class="tool-btn" id="tool-grid" onclick="toggleGrid()" title="Toggle grid (G)">⊞ Grid</button>
+    <div class="t-sep"></div>
+    <small style="color:var(--text-lo);font-size:10px">Layer: <span id="activeLayerLabel" style="color:var(--primary-light);font-weight:700">Floor 1</span></small>
+    <div class="t-sep"></div>
+    <small style="color:var(--text-lo);font-size:9px;letter-spacing:.3px">
+      <span title="V=Select P=Pan R=Room T=Table S=Stage W=Wall G=Grid Ctrl+Z/Y/C/V/X/D/A Del Space←↑→↓" style="cursor:help;border-bottom:1px dashed var(--text-lo)">⌨ Shortcuts</span>
+    </small>
+    <button class="mod-help-btn" onclick="openHelp('venue')" title="How to use the canvas">?</button>
+  </div>
+  <div class="venue-body">
+    <div class="canvas-wrap">
+      <canvas id="venueCanvas"></canvas>
+      <div class="canvas-hint" id="canvasHint">Select: drag objects · Ctrl+C/V/X/Z · Del to delete · G to toggle grid</div>
+      <div class="zoom-indicator" id="zoomIndicator">100%</div>
+    </div>
+    <div class="right-panel">
+      <div class="rp-section">
+        <div class="rp-header">
+          <span class="rp-title">Layers</span>
+          <button class="rp-add" onclick="addLayer()" title="Add layer">＋</button>
+        </div>
+        <div class="layers-list" id="layersList"></div>
+      </div>
+      <div class="palette-scroll">
+        <div class="pal-title">Elements</div>
+        <div class="pal-grid">
+          <div class="pal-item" id="pi-room" onclick="setTool('room')"><span>▭</span>Room</div>
+          <div class="pal-item" id="pi-table" onclick="setTool('table')"><span>⊞</span>Table</div>
+          <div class="pal-item" id="pi-stage" onclick="setTool('stage')"><span>▮</span>Stage</div>
+          <div class="pal-item" id="pi-wall" onclick="setTool('wall')"><span>━</span>Wall</div>
+          <div class="pal-item" id="pi-entrance" onclick="setTool('entrance')"><span>🚪</span>Entry</div>
+          <div class="pal-item" id="pi-restroom" onclick="setTool('restroom')"><span>🚻</span>WC</div>
+          <div class="pal-item" id="pi-exit" onclick="setTool('exit')"><span>🚪</span>Exit</div>
+          <div class="pal-item" onclick="openModal('custom-shape-modal')"><span>✏</span>Shape</div>
+        </div>
+        <div class="divider"></div>
+        <div class="pal-title">Color</div>
+        <div class="color-row" id="colorPicker">
+          <div class="csw sel" style="background:#5b5bd6" data-color="#5b5bd6" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#f59e0b" data-color="#f59e0b" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#8b5cf6" data-color="#8b5cf6" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#ef4444" data-color="#ef4444" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#38bdf8" data-color="#38bdf8" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#22c55e" data-color="#22c55e" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#ec4899" data-color="#ec4899" onclick="setColor(this)"></div>
+          <div class="csw" style="background:#14b8a6" data-color="#14b8a6" onclick="setColor(this)"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:8px;">
+          <span style="font-size:9px;color:var(--text-lo);font-family:'Syne',sans-serif;text-transform:uppercase;letter-spacing:1px">Custom</span>
+          <input type="color" id="customColorInput" value="#5b5bd6" onchange="setCustomColor(this.value)" style="width:24px;height:18px;border:1px solid var(--sys-border);border-radius:4px;background:none;cursor:pointer;padding:1px;">
+        </div>
+        <div class="divider"></div>
+        <div class="pal-title">Background</div>
+        <button class="bg-upload-btn" onclick="document.getElementById('bgUpload').click()">
+          <input type="file" id="bgUpload" accept="image/*" style="display:none" onchange="setCanvasBg(event)">
+          🖼 Upload image
+        </button>
+        <button onclick="clearCanvasBg()" style="width:100%;padding:5px;border-radius:5px;border:1px solid var(--sys-border);background:none;color:var(--text-lo);font-size:10px;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-bottom:6px;" onmouseover="this.style.color='var(--danger)';this.style.borderColor='var(--danger)'" onmouseout="this.style.color='var(--text-lo)';this.style.borderColor='var(--sys-border)'">✕ Clear</button>
+        <div class="divider"></div>
+        <div class="pal-title">Recently Used</div>
+        <div id="recentsList" class="recents-list"><div class="recents-empty">Nothing placed yet</div></div>
+        <div class="divider"></div>
+        <button class="lib-open-btn" onclick="openLibraryModal()">📚 Custom Library <span id="libCountBadge" class="lib-count-badge" style="display:none">0</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EVENTS panel -->
+<div id="panel-events" class="panel">
+  <div class="ev-panel-header">
+    <div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;">All Events</div><div style="font-size:10px;color:var(--text-md);margin-top:1px">Manage, view and organize all your events</div></div>
+    <div style="display:flex;align-items:center;gap:7px;">
+      <div class="ev-sort-wrap">
+        <span style="font-size:9px;color:var(--text-lo);font-family:'Syne',sans-serif;text-transform:uppercase;letter-spacing:.8px">Sort</span>
+        <select class="form-select" id="evSortSel" onchange="renderEvents()" style="padding:4px 7px;font-size:11px;height:28px;">
+          <option value="date">Date</option><option value="name">Name</option><option value="status">Status</option><option value="type">Type</option>
+        </select>
+      </div>
+      <button class="mod-help-btn" onclick="openHelp('events')" title="How Events works">?</button>
+      <button class="btn-primary" onclick="openModal('new-event-modal')">＋ Create Event</button>
+    </div>
+  </div>
+  <div class="filter-bar">
+    <div class="search-bar" style="flex:1;min-width:160px;"><span style="color:var(--text-lo)">🔍</span><input type="text" id="evSearch" placeholder="Search events…" oninput="filterEvents()"></div>
+    <button class="filter-chip active" data-filter="all" onclick="setEventFilter(this)">All</button>
+    <button class="filter-chip" data-filter="professional" onclick="setEventFilter(this)">💼 Pro</button>
+    <button class="filter-chip" data-filter="social" onclick="setEventFilter(this)">🎉 Social</button>
+    <button class="filter-chip" data-filter="personal" onclick="setEventFilter(this)">🧘 Personal</button>
+    <button class="filter-chip" data-filter="community" onclick="setEventFilter(this)">🌍 Community</button>
+    <button class="filter-chip" data-filter="finished" onclick="setEventFilter(this)">✅ Finished</button>
+  </div>
+  <div class="ev-sub-tabs">
+    <button class="esub active" onclick="setEvSubTab(this,'grid')">⊞ Grid</button>
+    <button class="esub" onclick="setEvSubTab(this,'list')">≡ List</button>
+  </div>
+  <div class="ev-scroll">
+    <div class="ev-grid" id="eventsGrid"></div>
+    <div id="finishedEvSection" style="display:none;margin-top:18px;">
+      <div class="finished-section-header" onclick="toggleFinishedSection()">
+        <span class="finished-section-title">✅ Finished Events</span>
+        <span id="finishedCount" class="finished-count-badge">0</span>
+        <span id="finishedChevron" style="margin-left:auto;font-size:11px;color:var(--text-lo);transition:transform .2s">▼</span>
+      </div>
+      <div id="finishedEvGrid" class="ev-grid" style="margin-top:8px;opacity:.75"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEDULE panel -->
+<div id="panel-schedule" class="panel">
+  <div class="sched-header">
+    <div><div class="sched-title">Schedule Planner</div><div class="sched-sub">Click any time slot to add · Hover activity to edit/delete · Overlaps auto-detected</div></div>
+    <div class="week-nav">
+      <button class="icon-btn" onclick="changeWeek(-1)">‹</button>
+      <span class="week-lbl" id="weekLabel">Loading…</span>
+      <button class="icon-btn" onclick="changeWeek(1)">›</button>
+    </div>
+    <div class="sched-actions">
+      <div class="sched-time-range">
+        <span style="font-size:10px;color:var(--text-lo)">🕐</span>
+        <select class="sched-range-select" id="schedStartSel" onchange="setSchedTimeRange()"></select>
+        <span style="font-size:10px;color:var(--text-lo)">–</span>
+        <select class="sched-range-select" id="schedEndSel" onchange="setSchedTimeRange()"></select>
+      </div>
+      <button class="sched-date-toggle active" id="dateToggleBtn" onclick="toggleSchedDate(this)">📅 Hide Date</button>
+      <div style="position:relative">
+        <button class="tool-btn" id="calPickerBtn" onclick="toggleCalendarPicker()">📆 Calendar</button>
+        <div id="calPickerPanel" style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:900;background:var(--sys-surface2);border:1px solid var(--sys-border);border-radius:12px;width:230px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden;"></div>
+      </div>
+      <button class="btn-secondary" onclick="exportSchedule()">⬇ Export</button>
+      <button class="mod-help-btn" onclick="openHelp('schedule')">?</button>
+    </div>
+  </div>
+  <div class="sched-grid-wrap"><div class="time-grid" id="timeGrid"></div></div>
+</div>
+
+<!-- MAP panel -->
+<div id="panel-map" class="panel">
+  <div class="map-header">
+    <div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px">Venue Map</div>
+      <div style="font-size:10px;color:var(--text-md);margin-top:1px">📍 Drop pins · 🔗 Share Location pin generates a QR code for mobile</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="tool-btn" id="mapPinModeBtn" onclick="togglePinMode()">📍 Drop Pin</button>
+      <button class="tool-btn" id="mapSharePinModeBtn" onclick="toggleSharePinMode()" style="border-color:rgba(34,197,94,.4);color:var(--success)">🔗 Share Location Pin</button>
+      <button class="tool-btn" id="mapSatBtn" onclick="cycleMapStyle()">🗺 Style</button>
+      <button class="btn-secondary" onclick="centerMapDefault()">⊡ Reset View</button>
+      <button class="mod-help-btn" onclick="openHelp('map')">?</button>
+    </div>
+  </div>
+  <div class="map-panel-body">
+    <div class="map-sidebar">
+      <div class="map-sidebar-inner">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-lo);margin-bottom:8px;">Search &amp; Jump To</div>
+        <div class="map-search-bar">
+          <input type="text" id="mapSearchInput" placeholder="Place name or address…" onkeydown="if(event.key==='Enter')mapSearchGo()">
+          <button onclick="mapSearchGo()">🔍</button>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-lo);margin-bottom:6px;margin-top:4px;">📍 Pinned Venues <span id="pinCount" style="color:var(--primary-light);font-size:11px;text-transform:none;letter-spacing:0">(0)</span></div>
+        <div id="pinsList"></div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(34,197,94,.7);margin-bottom:6px;margin-top:14px;display:flex;align-items:center;gap:5px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;animation:pls 1.5s ease-in-out infinite"></span>
+          🔗 Shared Locations <span id="sharePinCount" style="color:var(--success);font-size:11px;text-transform:none;letter-spacing:0">(0)</span>
+        </div>
+        <div id="sharePinsList"><div style="padding:12px 0;text-align:center;color:var(--text-lo);font-size:10px;font-style:italic">No share pins yet.<br>Enable "Share Location Pin" mode and click the map.</div></div>
+      </div>
+    </div>
+    <div class="map-canvas-container" id="mapCanvasContainer" style="position:relative;overflow:hidden;">
+      <div id="mapCanvas"></div>
+      <div class="map-pin-tooltip" id="mapPinTooltip"></div>
+      <div class="map-drop-pin-prompt" id="mapDropPrompt" style="z-index:1050;pointer-events:none">📍 Click to drop a pin</div>
+      <div class="map-mode-indicator" id="mapModeIndicator" style="z-index:1050;pointer-events:none">📍 Pin Mode — Click to place</div>
+      <div class="map-mode-indicator" id="mapShareModeIndicator" style="display:none;background:rgba(34,197,94,.85);z-index:1050;pointer-events:none">🔗 Share Pin Mode — Click to place</div>
+      <div id="pinSavePopup" class="pin-save-popup" style="display:none;z-index:1100;"></div>
+      <div class="map-zoom-ctrls" style="z-index:1050;">
+        <button class="map-ctrl-btn" onclick="mapZoomIn()">+</button>
+        <button class="map-ctrl-btn" onclick="mapZoomOut()">−</button>
+        <button class="map-ctrl-btn" id="mapStyleBtn" onclick="cycleMapStyle()">🎨</button>
+        <button class="map-ctrl-btn" onclick="centerMapDefault()">⊡</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ATTENDEES panel -->
+<div id="panel-attendees" class="panel active">
+  <div class="att-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px">Attendees</div><div style="font-size:10px;color:var(--text-md);margin-top:1px">View and manage attendee list</div></div>
+      <div style="display:flex;align-items:center;gap:7px;">
+        <button class="mod-help-btn" onclick="openHelp('attendees')">?</button>
+        <button class="btn-primary" onclick="openModal('att-modal')">＋ Add Attendee</button>
+      </div>
+    </div>
+    <div class="search-bar" style="flex-shrink:0">
+      <span style="color:var(--text-lo)">🔍</span>
+      <input type="text" placeholder="Search attendees…" oninput="filterAttendees(this.value)">
+      <select class="form-select" style="width:auto;padding:3px 7px;font-size:10px;" onchange="filterAttendeesByStatus(this.value)">
+        <option value="">All</option><option>Confirmed</option><option>Pending</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--sys-border);flex:1;min-height:0">
+      <table class="att-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="attBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /main -->
+
+
+<!-- ══════════════════════════════════════════
+     MOBILE SHELL  (≤ 768 px, shown via CSS)
+     No Venue tab — Events · Schedule · Map · Attendees
+══════════════════════════════════════════════ -->
+<div id="mobileShell" style="display:none;">
+
+  <!-- ── TOP HEADER ────────────────────────────── -->
+  <div class="m-header">
+    <div class="m-logo-mark">EM</div>
+    <div class="m-logo-text">EmGo</div>
+    <select class="m-event-sel" id="mEventSel" onchange="mSwitchEvent(this.value)" aria-label="Active event">
+      <option value="">Loading…</option>
+    </select>
+    <div class="m-header-right">
+      <div class="m-avatar-btn avatar" id="mobileAvatar" title="Logged in">ME</div>
+      <button class="m-logout" onclick="logout()" title="Sign out" aria-label="Sign out">⇥</button>
+    </div>
+  </div>
+
+  <!-- ── PANEL AREA ─────────────────────────────── -->
+  <div class="m-content">
+
+    <!-- ●  EVENTS ──────────────────────────────── -->
+    <div id="m-panel-events" class="m-panel active" role="tabpanel" aria-label="Events">
+
+      <div class="m-panel-head">
+        <div>
+          <div class="m-panel-title">My Events</div>
+          <div class="m-panel-sub">Tap a card to load · ＋ to create</div>
+        </div>
+        <select class="form-select" id="mEvSortSel" onchange="renderMobileEvents()"
+                style="font-size:16px;padding:5px 8px;height:34px;min-width:0;max-width:100px;" aria-label="Sort events">
+          <option value="date">Date</option>
+          <option value="name">Name</option>
+          <option value="status">Status</option>
+        </select>
+      </div>
+
+      <!-- Search -->
+      <div class="m-search">
+        <span style="color:var(--text-lo);font-size:14px;flex-shrink:0;">🔍</span>
+        <input type="text" id="mEvSearch" placeholder="Search events…"
+               oninput="renderMobileEvents()" autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+
+      <!-- Filter chips -->
+      <div class="m-filter-scroll" role="group" aria-label="Filter by type">
+        <button class="m-chip active" data-filter="all"          onclick="setMobileEventFilter(this)">All</button>
+        <button class="m-chip"        data-filter="professional" onclick="setMobileEventFilter(this)">💼 Pro</button>
+        <button class="m-chip"        data-filter="social"       onclick="setMobileEventFilter(this)">🎉 Social</button>
+        <button class="m-chip"        data-filter="personal"     onclick="setMobileEventFilter(this)">🧘 Personal</button>
+        <button class="m-chip"        data-filter="community"    onclick="setMobileEventFilter(this)">🌍 Community</button>
+        <button class="m-chip"        data-filter="finished"     onclick="setMobileEventFilter(this)">✅ Done</button>
+      </div>
+
+      <!-- Event cards -->
+      <div class="m-ev-list" id="mEvList"></div>
+
+      <!-- Finished events accordion -->
+      <div id="mFinishedEvSection" style="display:none;padding:0 14px 14px;">
+        <div onclick="mToggleFinished()"
+             style="display:flex;align-items:center;gap:8px;padding:10px 0;cursor:pointer;border-top:1px solid var(--sys-border);touch-action:manipulation;">
+          <span style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text-lo);">✅ Finished Events</span>
+          <span id="mFinishedCount"
+                style="background:rgba(34,197,94,.15);color:#22c55e;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;">0</span>
+          <span id="mFinishedChevron" style="margin-left:auto;font-size:11px;color:var(--text-lo);">▼</span>
+        </div>
+        <div id="mFinishedEvGrid" class="m-ev-list" style="margin-top:0;padding:0;opacity:.75;display:none;"></div>
+      </div>
+    </div><!-- /m-panel-events -->
+
+    <!-- ●  SCHEDULE ─────────────────────────────── -->
+    <div id="m-panel-schedule" class="m-panel" role="tabpanel" aria-label="Schedule">
+
+      <div class="m-sched-header">
+        <div class="m-week-nav">
+          <button class="icon-btn" onclick="changeWeek(-1)" aria-label="Previous week">‹</button>
+          <span class="m-week-lbl" id="mWeekLabel">Loading…</span>
+          <button class="icon-btn" onclick="changeWeek(1)"  aria-label="Next week">›</button>
+        </div>
+        <div class="m-sched-actions">
+          <select class="sched-range-select" id="mSchedStartSel" onchange="setSchedTimeRange()"
+                  style="font-size:16px;padding:4px 6px;" aria-label="Start hour"></select>
+          <span style="font-size:10px;color:var(--text-lo);align-self:center;">–</span>
+          <select class="sched-range-select" id="mSchedEndSel" onchange="setSchedTimeRange()"
+                  style="font-size:16px;padding:4px 6px;" aria-label="End hour"></select>
+          <button class="sched-date-toggle active" id="mDateToggleBtn"
+                  onclick="toggleSchedDate(this)" style="font-size:11px;padding:5px 10px;">📅 Date</button>
+          <button class="btn-secondary" onclick="openModal('sched-modal')"
+                  style="font-size:11px;padding:5px 10px;">＋ Activity</button>
+        </div>
+      </div>
+
+      <div class="m-sched-scroll">
+        <!-- timeGrid is moved here at init time by the pre-init script in index.html -->
+        <div id="m-schedGrid"></div>
+      </div>
+    </div><!-- /m-panel-schedule -->
+
+    <!-- ●  MAP ──────────────────────────────────── -->
+    <div id="m-panel-map" class="m-panel m-map-panel" role="tabpanel" aria-label="Map">
+
+      <!-- Leaflet map injects here at init -->
+      <div id="m-mapContainer"></div>
+
+      <!-- Pin / Share-pin mode banners -->
+      <div class="m-map-mode-bar"       id="mMapModeBar">📍 Pin Mode — Tap to place</div>
+      <div class="m-map-mode-bar share" id="mMapShareModeBar">🔗 Share Pin — Tap to place</div>
+
+      <!-- Right-side FAB column -->
+      <div class="m-map-fabs" role="group" aria-label="Map tools">
+        <button class="m-fab" onclick="cycleMapStyle()"    title="Cycle map style" aria-label="Map style">🗺</button>
+        <button class="m-fab" onclick="mapZoomIn()"        title="Zoom in"  aria-label="Zoom in">+</button>
+        <button class="m-fab" onclick="mapZoomOut()"       title="Zoom out" aria-label="Zoom out">−</button>
+        <button class="m-fab" onclick="centerMapDefault()" title="Reset view" aria-label="Reset view">⊡</button>
+        <button class="m-fab" id="mPinModeBtn"      onclick="mTogglePinMode()"      title="Drop Pin"       aria-label="Drop pin">📍</button>
+        <button class="m-fab green-fab" id="mSharePinModeBtn" onclick="mToggleSharePinMode()" title="Share Pin" aria-label="Share pin">🔗</button>
+        <button class="m-fab blue-fab"  id="mLiveFab"      onclick="toggleLiveLocation()"    title="Live location" aria-label="Live location">📡</button>
+        <button class="m-fab" onclick="openQrScanner()" title="Scan QR code" aria-label="Scan QR">📷</button>
+        <button class="m-fab" onclick="openCodeModal()"  title="Enter share code" aria-label="Enter code">🔑</button>
+      </div>
+
+      <!-- Floating pin-save bottom sheet -->
+      <div id="m-pinSavePopup"></div>
+
+      <!-- "Pins & Venues" sheet toggle -->
+      <button class="m-map-sheet-toggle" onclick="toggleMapSheet()" aria-label="Open pins list">
+        📍 Pins &amp; Venues
+      </button>
+
+      <!-- Pins bottom sheet -->
+      <div class="m-map-sheet" id="mMapSheet" role="complementary" aria-label="Pinned locations">
+        <div class="m-sheet-handle" role="presentation"></div>
+        <div class="m-sheet-inner">
+
+          <!-- Map search bar -->
+          <div class="m-search" style="margin:0 0 12px;">
+            <span style="color:var(--text-lo);flex-shrink:0;">🔍</span>
+            <input type="text" id="mMapSearchInput"
+                   placeholder="Search or jump to place…"
+                   onkeydown="if(event.key==='Enter')mMapSearchGo()"
+                   autocomplete="off" autocorrect="off" spellcheck="false">
+            <button onclick="mMapSearchGo()"
+                    style="background:none;border:none;color:var(--primary-light);font-size:16px;cursor:pointer;padding:0 2px;touch-action:manipulation;"
+                    aria-label="Search">Go</button>
+          </div>
+
+          <!-- Pinned venues -->
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-lo);margin-bottom:6px;">
+            📍 Pinned Venues
+            <span id="mPinCount" style="color:var(--primary-light);font-size:11px;text-transform:none;letter-spacing:0;">(0)</span>
+          </div>
+          <div id="mPinsList"></div>
+
+          <!-- Shared locations -->
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(34,197,94,.7);margin:14px 0 6px;display:flex;align-items:center;gap:5px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block;animation:pls 1.5s ease-in-out infinite;flex-shrink:0;"></span>
+            🔗 Shared Locations
+            <span id="mSharePinCount" style="color:#22c55e;font-size:11px;text-transform:none;letter-spacing:0;">(0)</span>
+          </div>
+          <div id="mSharePinsList">
+            <div style="padding:12px 0;text-align:center;color:var(--text-lo);font-size:11px;font-style:italic;line-height:1.6;">
+              No share pins yet.<br>Use 🔗 button and tap the map.
+            </div>
+          </div>
+
+        </div><!-- /m-sheet-inner -->
+      </div><!-- /mMapSheet -->
+    </div><!-- /m-panel-map -->
+
+    <!-- ●  ATTENDEES ──────────────────────────────── -->
+    <div id="m-panel-attendees" class="m-panel" role="tabpanel" aria-label="Attendees">
+
+      <div class="m-panel-head">
+        <div>
+          <div class="m-panel-title">Attendees</div>
+          <div class="m-panel-sub">View and manage attendee list</div>
+        </div>
+      </div>
+
+      <div class="m-search" style="margin:0 14px 10px;">
+        <span style="color:var(--text-lo);flex-shrink:0;">🔍</span>
+        <input type="text" id="mAttSearch" placeholder="Search attendees…"
+               oninput="renderMobileAttendees(this.value)"
+               autocomplete="off" autocorrect="off" spellcheck="false">
+        <select class="form-select"
+                style="width:auto;padding:3px 7px;font-size:16px;border-radius:6px;flex-shrink:0;"
+                onchange="filterMobileAttendeesByStatus(this.value)"
+                aria-label="Filter by status">
+          <option value="">All</option>
+          <option>Confirmed</option>
+          <option>Pending</option>
+        </select>
+      </div>
+
+      <div class="m-att-list" id="mAttList"></div>
+    </div><!-- /m-panel-attendees -->
+
+  </div><!-- /m-content -->
+
+  <!-- ── BOTTOM TAB BAR — 4 tabs, NO Venue ─────── -->
+  <div class="m-tabbar" role="tablist" aria-label="Main navigation">
+    <button class="m-tab" id="mtab-events"    role="tab" aria-selected="false"
+            onclick="mSwitchTab('events',this)">
+      <span class="m-tab-icon" aria-hidden="true">📋</span>Events
+    </button>
+    <button class="m-tab" id="mtab-schedule" role="tab" aria-selected="false"
+            onclick="mSwitchTab('schedule',this)">
+      <span class="m-tab-icon" aria-hidden="true">📅</span>Schedule
+    </button>
+    <!--<button class="m-tab" id="mtab-map" role="tab" aria-selected="false"
+            onclick="mSwitchTab('map',this)">-->
+             <button class="m-tab" id="mtab-map" role="tab" aria-selected="false"
+            onclick="location.href='mobileMap.html'">
+      <span class="m-tab-icon" aria-hidden="true">📍</span>Map
+    </button>
+    <button class="m-tab active" id="mtab-attendees" role="tab" aria-selected="true"
+            onclick="mSwitchTab('attendees',this)">
+      <span class="m-tab-icon" aria-hidden="true">👥</span>Attendees
+    </button>
+  </div>
+
+</div><!-- /mobileShell -->
+
+<!-- Mobile FAB -->
+<button class="m-create-fab" id="mCreateFab" onclick="mCreateAction()">＋</button>
+
+<!-- QR Scanner Overlay -->
+<div id="qrOverlay">
+  <button class="qr-close" onclick="closeQrScanner()">✕</button>
+  <div style="position:relative;display:inline-block;">
+    <video id="qrVideo" playsinline autoplay muted></video>
+    <div class="qr-frame">
+      <div class="qr-corner tl"></div>
+      <div class="qr-corner tr"></div>
+      <div class="qr-corner bl"></div>
+      <div class="qr-corner br"></div>
+      <div class="qr-scan-line"></div>
+    </div>
+  </div>
+  <canvas id="qrCanvas"></canvas>
+  <div class="qr-hint">Point at an EmGo QR code to navigate to the location</div>
+</div>
+
+<!-- Enter Code Modal -->
+<div id="codeModal">
+  <div class="code-sheet">
+    <h3>🔑 Enter Location Code</h3>
+    <p>Type the share code from someone's EmGo map pin.</p>
+    <div class="code-input-row">
+      <input type="text" id="codeInput" maxlength="8" placeholder="ABC123" autocomplete="off" autocorrect="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()">
+      <button class="code-go-btn" onclick="handleCodeEntry()">Go →</button>
+    </div>
+    <button class="code-cancel-btn" onclick="closeCodeModal()">Cancel</button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     SHARED MODALS (desktop + mobile)
+══════════════════════════════════════════════ -->
+
+<!-- New Event -->
+<div class="modal-overlay" id="new-event-modal">
+  <div class="modal">
+    <div class="modal-title">🎉 New Event <button class="modal-close" onclick="closeModal('new-event-modal')">✕</button></div>
+    <div class="form-group"><label class="form-label">Event Name</label><input class="form-input" type="text" id="nev-name" placeholder="e.g. Annual Tech Summit…"></div>
+    <div class="form-group">
+      <label class="form-label">Event Type</label>
+      <div class="type-picker" id="evTypePicker">
+        <div class="type-opt active" data-type="professional" onclick="selectEvType(this)"><span class="ti">💼</span>Professional</div>
+        <div class="type-opt" data-type="social" onclick="selectEvType(this)"><span class="ti">🎉</span>Social/Friends</div>
+        <div class="type-opt" data-type="personal" onclick="selectEvType(this)"><span class="ti">🧘</span>Personal/Solo</div>
+        <div class="type-opt" data-type="community" onclick="selectEvType(this)"><span class="ti">🌍</span>Community</div>
+        <div class="type-opt" data-type="family" onclick="selectEvType(this)"><span class="ti">🏠</span>Family</div>
+        <div class="type-opt" data-type="other" onclick="selectEvType(this)"><span class="ti">✨</span>Other</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="nev-date"></div>
+      <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" type="time" id="nev-time"></div>
+      <div class="form-group"><label class="form-label">End Time</label><input class="form-input" type="time" id="nev-endtime"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Venue / Location</label><input class="form-input" type="text" id="nev-venue" placeholder="Convention Center, My Home…"></div>
+    <div class="form-group"><label class="form-label">Attendees <span style="opacity:.5;font-style:italic;text-transform:none;font-weight:400">(optional)</span></label><input class="form-input" type="number" id="nev-att" placeholder="Leave blank if none"></div>
+    <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="nev-desc" placeholder="What's this event about?"></textarea></div>
+    <div class="form-group">
+      <label class="form-label">Automation</label>
+      <label class="auto-opt-toggle"><input type="checkbox" id="nev-auto-finish" checked><span class="auto-opt-icon">✅</span><div><div class="auto-opt-label">Auto Finish</div><div class="auto-opt-sub">Mark done after end date &amp; time</div></div></label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Accent Color</label>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+        <div class="csw sel" style="width:20px;height:20px;border-radius:4px;background:#5b5bd6" data-color="#5b5bd6" onclick="pickEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#f59e0b" data-color="#f59e0b" onclick="pickEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#8b5cf6" data-color="#8b5cf6" onclick="pickEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ef4444" data-color="#ef4444" onclick="pickEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#14b8a6" data-color="#14b8a6" onclick="pickEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ec4899" data-color="#ec4899" onclick="pickEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#22c55e" data-color="#22c55e" onclick="pickEvColor(this)"></div>
+        <input type="color" id="nev-color-custom" value="#5b5bd6" onchange="setNevCustomColor(this.value)" style="width:24px;height:20px;border:1px solid var(--sys-border);border-radius:4px;background:none;cursor:pointer;padding:1px;">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('new-event-modal')">Cancel</button>
+      <button class="btn-primary" onclick="createNewEvent()">Create Event</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Event -->
+<div class="modal-overlay" id="edit-event-modal">
+  <div class="modal">
+    <div class="modal-title">✏️ Edit Event <button class="modal-close" onclick="closeModal('edit-event-modal')">✕</button></div>
+    <input type="hidden" id="edit-ev-id">
+    <div class="form-group"><label class="form-label">Event Name</label><input class="form-input" type="text" id="edit-ev-name"></div>
+    <div class="form-group">
+      <label class="form-label">Event Type</label>
+      <div class="type-picker" id="editEvTypePicker">
+        <div class="type-opt active" data-type="professional" onclick="selectEditEvType(this)"><span class="ti">💼</span>Professional</div>
+        <div class="type-opt" data-type="social" onclick="selectEditEvType(this)"><span class="ti">🎉</span>Social/Friends</div>
+        <div class="type-opt" data-type="personal" onclick="selectEditEvType(this)"><span class="ti">🧘</span>Personal/Solo</div>
+        <div class="type-opt" data-type="community" onclick="selectEditEvType(this)"><span class="ti">🌍</span>Community</div>
+        <div class="type-opt" data-type="family" onclick="selectEditEvType(this)"><span class="ti">🏠</span>Family</div>
+        <div class="type-opt" data-type="other" onclick="selectEditEvType(this)"><span class="ti">✨</span>Other</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="edit-ev-date"></div>
+      <div class="form-group"><label class="form-label">Start</label><input class="form-input" type="time" id="edit-ev-time"></div>
+      <div class="form-group"><label class="form-label">End</label><input class="form-input" type="time" id="edit-ev-endtime"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Venue / Location</label><input class="form-input" type="text" id="edit-ev-venue"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Attendees</label><input class="form-input" type="number" id="edit-ev-att"></div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-select" id="edit-ev-status"><option value="upcoming">⏳ Upcoming</option><option value="draft">◦ Draft</option><option value="finished">✅ Finished</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="edit-ev-desc"></textarea></div>
+    <div class="form-group">
+      <label class="auto-opt-toggle"><input type="checkbox" id="edit-nev-auto-finish"><span class="auto-opt-icon">✅</span><div><div class="auto-opt-label">Auto Finish</div></div></label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Accent Color</label>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center" id="editEvColorRow">
+        <div class="csw sel" style="width:20px;height:20px;border-radius:4px;background:#5b5bd6" data-color="#5b5bd6" onclick="pickEditEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#f59e0b" data-color="#f59e0b" onclick="pickEditEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#8b5cf6" data-color="#8b5cf6" onclick="pickEditEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ef4444" data-color="#ef4444" onclick="pickEditEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#14b8a6" data-color="#14b8a6" onclick="pickEditEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ec4899" data-color="#ec4899" onclick="pickEditEvColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#22c55e" data-color="#22c55e" onclick="pickEditEvColor(this)"></div>
+        <input type="color" id="edit-ev-color-custom" value="#5b5bd6" onchange="setEditEvCustomColor(this.value)" style="width:24px;height:20px;border:1px solid var(--sys-border);border-radius:4px;background:none;cursor:pointer;padding:1px;">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('edit-event-modal')">Cancel</button>
+      <button class="btn-primary" onclick="saveEditEvent()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Activity -->
+<div class="modal-overlay" id="sched-modal">
+  <div class="modal">
+    <div class="modal-title">Add Activity <button class="modal-close" onclick="closeModal('sched-modal')">✕</button></div>
+    <div class="form-group"><label class="form-label">Activity Name</label><input class="form-input" type="text" id="act-name" placeholder="e.g. Keynote, Lunch…"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="act-date"></div>
+      <div class="form-group"><label class="form-label">Start</label><input class="form-input" type="time" id="act-start" value="09:00"></div>
+      <div class="form-group"><label class="form-label">End</label><input class="form-input" type="time" id="act-end" value="10:00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Color</label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:4px">
+          <div class="csw sel" style="width:20px;height:20px;border-radius:4px;background:#5b5bd6" data-color="#5b5bd6" onclick="pickActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#f59e0b" data-color="#f59e0b" onclick="pickActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#8b5cf6" data-color="#8b5cf6" onclick="pickActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ef4444" data-color="#ef4444" onclick="pickActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#38bdf8" data-color="#38bdf8" onclick="pickActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#22c55e" data-color="#22c55e" onclick="pickActColor(this)"></div>
+          <input type="color" id="act-color-custom" value="#5b5bd6" onchange="setActCustomColor(this.value)" style="width:24px;height:20px;border:1px solid var(--sys-border);border-radius:4px;background:none;cursor:pointer;padding:1px;">
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Venue / Room</label><input class="form-input" type="text" id="act-venue" placeholder="Room A"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('sched-modal')">Cancel</button>
+      <button class="btn-primary" onclick="addActivity()">Add Activity</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Activity -->
+<div class="modal-overlay" id="edit-sched-modal">
+  <div class="modal">
+    <div class="modal-title">✏️ Edit Activity <button class="modal-close" onclick="closeModal('edit-sched-modal')">✕</button></div>
+    <input type="hidden" id="edit-act-id">
+    <div class="form-group"><label class="form-label">Activity Name</label><input class="form-input" type="text" id="edit-act-name"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="edit-act-date"></div>
+      <div class="form-group"><label class="form-label">Start</label><input class="form-input" type="time" id="edit-act-start"></div>
+      <div class="form-group"><label class="form-label">End</label><input class="form-input" type="time" id="edit-act-end"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Color</label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:4px" id="editActColorRow">
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#5b5bd6" data-color="#5b5bd6" onclick="pickEditActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#f59e0b" data-color="#f59e0b" onclick="pickEditActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#8b5cf6" data-color="#8b5cf6" onclick="pickEditActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ef4444" data-color="#ef4444" onclick="pickEditActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#38bdf8" data-color="#38bdf8" onclick="pickEditActColor(this)"></div>
+          <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#22c55e" data-color="#22c55e" onclick="pickEditActColor(this)"></div>
+          <input type="color" id="edit-act-color-custom" value="#5b5bd6" onchange="setEditActCustomColor(this.value)" style="width:24px;height:20px;border:1px solid var(--sys-border);border-radius:4px;background:none;cursor:pointer;padding:1px;">
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Venue / Room</label><input class="form-input" type="text" id="edit-act-venue"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('edit-sched-modal')">Cancel</button>
+      <button class="btn-primary" onclick="saveEditActivity()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Venue Pin -->
+<div class="modal-overlay" id="loc-modal">
+  <div class="modal">
+    <div class="modal-title">📍 Add Venue Pin <button class="modal-close" onclick="closeModal('loc-modal')">✕</button></div>
+    <div class="form-group"><label class="form-label">Venue / Location Name</label><input class="form-input" type="text" id="loc-name" placeholder="e.g. Convention Center…"></div>
+    <div class="form-group"><label class="form-label">Address / Notes</label><input class="form-input" type="text" id="loc-address" placeholder="e.g. 123 Main St, Manila"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Latitude</label><input class="form-input" type="text" id="loc-lat" placeholder="14.5995"></div>
+      <div class="form-group"><label class="form-label">Longitude</label><input class="form-input" type="text" id="loc-lng" placeholder="120.9842"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pin Color</label>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px" id="locColorRow">
+        <div class="csw sel" style="width:20px;height:20px;border-radius:4px;background:#5b5bd6" data-color="#5b5bd6" onclick="pickLocColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#f59e0b" data-color="#f59e0b" onclick="pickLocColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#8b5cf6" data-color="#8b5cf6" onclick="pickLocColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#ef4444" data-color="#ef4444" onclick="pickLocColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#14b8a6" data-color="#14b8a6" onclick="pickLocColor(this)"></div>
+        <div class="csw" style="width:20px;height:20px;border-radius:4px;background:#22c55e" data-color="#22c55e" onclick="pickLocColor(this)"></div>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Linked Event <span style="opacity:.5">(optional)</span></label>
+      <select class="form-select" id="loc-event"><option value="">— None —</option></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('loc-modal')">Cancel</button>
+      <button class="btn-primary" onclick="addPinnedVenue()">📍 Add to Map</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Attendee -->
+<div class="modal-overlay" id="att-modal">
+  <div class="modal">
+    <div class="modal-title">Add Attendee <button class="modal-close" onclick="closeModal('att-modal')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">First Name</label><input class="form-input" type="text" id="att-first"></div>
+      <div class="form-group"><label class="form-label">Last Name</label><input class="form-input" type="text" id="att-last"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Email <span style="opacity:.5;font-style:italic">(optional)</span></label><input class="form-input" type="email" id="att-email"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Role</label>
+        <select class="form-select" id="att-role"><option>Guest</option><option>Speaker</option><option>Organizer</option><option>Sponsor</option><option>Staff</option><option>Friend</option><option>Family</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-select" id="att-status"><option>Pending</option><option>Confirmed</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('att-modal')">Cancel</button>
+      <button class="btn-primary" onclick="addAttendee()">Add Attendee</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Element (desktop only - hidden on mobile via overflow) -->
+<div class="modal-overlay" id="custom-element-modal">
+  <div class="modal">
+    <div class="modal-title">🖼 Custom Element <button class="modal-close" onclick="closeModal('custom-element-modal')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Label</label><input class="form-input" type="text" id="ce-label" placeholder="e.g. VIP Lounge" oninput="updateCePreview()"></div>
+      <div class="form-group"><label class="form-label">Icon/Emoji</label><input class="form-input" type="text" id="ce-icon" placeholder="⭐" maxlength="4" oninput="updateCePreview()"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Shape</label>
+      <div class="shape-picker" id="ceShapePicker">
+        <div class="shape-opt active" data-shape="rounded" onclick="selectCeShape(this)">Rounded</div>
+        <div class="shape-opt" data-shape="rect" onclick="selectCeShape(this)">Rectangle</div>
+        <div class="shape-opt" data-shape="circle" onclick="selectCeShape(this)">Circle</div>
+        <div class="shape-opt" data-shape="diamond" onclick="selectCeShape(this)">Diamond</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Width</label><input class="form-input" type="number" id="ce-w" value="100" min="40" max="400"></div>
+      <div class="form-group"><label class="form-label">Height</label><input class="form-input" type="number" id="ce-h" value="70" min="30" max="400"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Color</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="color" id="ce-color" value="#5b5bd6" style="width:32px;height:24px;border:1px solid var(--sys-border);border-radius:5px;background:none;cursor:pointer;padding:1px">
+        <span style="font-size:10px;color:var(--text-lo)">Pick any color</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Image <span style="opacity:.5;font-style:italic">(optional)</span></label>
+      <button class="bg-upload-btn" onclick="document.getElementById('ceImgInput').click()">
+        <input type="file" id="ceImgInput" accept="image/*" style="display:none" onchange="previewCeImg(event)"> 📷 Upload image
+      </button>
+      <img id="ceImgPreview" class="img-preview" alt="">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Preview</label>
+      <div style="border:1px dashed var(--sys-border);border-radius:7px;padding:12px;text-align:center;background:var(--primary-dim);min-height:55px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px">
+        <span style="font-size:18px" id="ce-prev-icon">⭐</span>
+        <span style="font-size:10px;font-weight:600;font-family:'Syne',sans-serif;color:var(--primary-light)" id="ce-prev-label">My Element</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('custom-element-modal')">Cancel</button>
+      <button class="btn-primary" onclick="placeCustomElement()">Place on Canvas</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Shape Maker -->
+<div class="modal-overlay" id="custom-shape-modal">
+  <div class="modal wide">
+    <div class="modal-title">✏ Custom Shape Maker <button class="modal-close" onclick="closeModal('custom-shape-modal')">✕</button></div>
+    <div class="shape-tool-row">
+      <button class="stool active" id="cst-poly" onclick="setCSTool('poly',this)">✏ Polygon</button>
+      <button class="stool" id="cst-rect" onclick="setCSTool('rect',this)">▭ Rectangle</button>
+      <button class="stool" id="cst-line" onclick="setCSTool('line',this)">━ Line</button>
+      <button class="stool" id="cst-circle" onclick="setCSTool('circle',this)">◯ Ellipse</button>
+      <div style="margin-left:auto;display:flex;gap:4px">
+        <button class="stool" onclick="undoCSPoint()">↩ Undo</button>
+        <button class="stool" onclick="clearCS()">🗑 Clear</button>
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group"><label class="form-label">Label</label><input class="form-input" type="text" id="cs-label" placeholder="e.g. North Wall, Lobby"></div>
+      <div class="form-group"><label class="form-label">Color</label>
+        <div style="display:flex;align-items:center;gap:5px;margin-top:4px">
+          <input type="color" id="cs-color" value="#9896c8" style="width:30px;height:24px;border:1px solid var(--sys-border);border-radius:5px;background:none;cursor:pointer;padding:1px">
+          <select class="form-select" style="flex:1" onchange="document.getElementById('cs-color').value=this.value">
+            <option value="#9896c8">Wall</option><option value="#5b5bd6">Room</option><option value="#f59e0b">Table Area</option><option value="#22c55e">Entry</option><option value="#ef4444">Restricted</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div style="position:relative">
+      <canvas id="customShapeCanvas" width="520" height="280"></canvas>
+    </div>
+    <div class="form-group" style="margin-top:8px">
+      <label class="form-label">Fill Style</label>
+      <div style="display:flex;gap:5px">
+        <button class="stool active" id="fill-filled" onclick="setFillStyle('filled',this)">■ Filled</button>
+        <button class="stool" id="fill-outline" onclick="setFillStyle('outline',this)">□ Outline</button>
+        <button class="stool" id="fill-dashed" onclick="setFillStyle('dashed',this)">┄ Dashed</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('custom-shape-modal')">Cancel</button>
+      <button class="btn-primary" onclick="placeCustomShape()">Add to Canvas</button>
+    </div>
+  </div>
+</div>
+
+<!-- Replace Share Pin -->
+<div class="replace-modal" id="replaceModal">
+  <div class="replace-box">
+    <span class="replace-icon">⚠️</span>
+    <div class="replace-title">A Share Location pin already exists</div>
+    <div class="replace-msg">Only one Share Location pin can be active at a time.</div>
+    <div class="replace-existing">
+      <span class="replace-existing-icon">🔗</span>
+      <div>
+        <div class="replace-existing-name" id="replaceExistingName">—</div>
+        <div class="replace-existing-code" id="replaceExistingCode">——</div>
+      </div>
+    </div>
+    <div class="replace-btns">
+      <button class="replace-btn-cancel" onclick="closeReplaceModal()">Keep Existing</button>
+      <button class="replace-btn-confirm" onclick="confirmReplace()">🗑 Delete &amp; Create New</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Location Modal -->
+<div class="share-loc-modal" id="shareLocModal">
+  <div class="share-loc-box">
+    <div class="slm-title">
+      <span>🔗 Share Location</span>
+      <button class="modal-close" onclick="closeShareModal()">✕</button>
+    </div>
+    <div class="slm-sub" id="slmPinName">—</div>
+    <div class="slm-qr-wrap">
+      <canvas id="shareQrCanvas" width="164" height="164"></canvas>
+    </div>
+    <div class="slm-divider">or enter this code in EmGo Mobile</div>
+    <div class="slm-code-row">
+      <span class="slm-code" id="slmCodeVal">——</span>
+      <button class="slm-copy-btn" onclick="copyShareCode()">Copy</button>
+    </div>
+    <div class="slm-info">
+      📱 Friends can scan the QR code or enter the code to navigate to this location.
+    </div>
+    <div class="slm-footer">
+      <button class="btn-ghost" onclick="closeShareModal()">Close</button>
+      <button class="slm-dl-btn" onclick="downloadShareQR()">⬇ Save QR Image</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Library Modal -->
+<div class="modal-overlay" id="custom-library-modal">
+  <div class="modal wide" style="max-width:660px;width:95vw;">
+    <div class="modal-title">📚 Custom Library <button class="modal-close" onclick="closeModal('custom-library-modal')">✕</button></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <div class="search-bar" style="flex:1;min-width:150px;"><span style="color:var(--text-lo)">🔍</span><input type="text" id="libSearch" placeholder="Search library…" oninput="renderCustomLibrary()"></div>
+      <div style="display:flex;gap:3px;background:var(--sys-surface2);border:1px solid var(--sys-border);border-radius:7px;padding:2px;">
+        <button class="lib-sort-btn active" id="libSortDate" onclick="setLibSort('date',this)">🕐 Date</button>
+        <button class="lib-sort-btn" id="libSortName" onclick="setLibSort('name',this)">Az Name</button>
+        <button class="lib-sort-btn" id="libSortFav" onclick="setLibSort('fav',this)">⭐ Fav</button>
+      </div>
+      <div style="display:flex;gap:3px;background:var(--sys-surface2);border:1px solid var(--sys-border);border-radius:7px;padding:2px;">
+        <button class="lib-sort-btn active" id="libTypeAll" onclick="setLibTypeFilter('all',this)">All</button>
+        <button class="lib-sort-btn" id="libTypeShape" onclick="setLibTypeFilter('custom-shape',this)">✏ Shapes</button>
+        <button class="lib-sort-btn" id="libTypeEl" onclick="setLibTypeFilter('custom-element',this)">🖼 Elements</button>
+      </div>
+    </div>
+    <div id="customLibList" class="custom-lib-modal-grid"><div class="recents-empty">No saved items yet.</div></div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <span id="libModalCount" style="font-size:10px;color:var(--text-lo)">0 items</span>
+      <button class="btn-ghost" onclick="closeModal('custom-library-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Overlap Warning -->
+<div class="overlap-warning-modal" id="overlapWarnModal">
+  <div class="overlap-warning-box">
+    <div class="ow-icon">⚠️</div>
+    <div class="ow-title">Schedule Overlap Detected</div>
+    <div class="ow-body">This activity overlaps with existing activities.</div>
+    <div class="ow-conflicts" id="owConflictList"></div>
+    <div class="ow-actions">
+      <button class="ow-btn-cancel" onclick="cancelOverlapAdd()">Cancel</button>
+      <button class="ow-btn-add" onclick="forceAddActivity()">Add Anyway</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div class="help-overlay" id="helpModal" onclick="if(event.target===this)closeHelp()">
+  <div class="help-box">
+    <div class="help-head">
+      <div class="help-head-left">
+        <div class="help-head-icon" id="helpIcon">🗺</div>
+        <div class="help-head-title" id="helpTitle">Help</div>
+      </div>
+      <button class="help-close" onclick="closeHelp()">✕</button>
+    </div>
+    <div class="help-body"><ul id="helpList"></ul></div>
+  </div>
+</div>
+
+<!-- Canvas Context Menu (desktop only) -->
+<div id="ctxMenu">
+  <div class="ctx-label">Element</div>
+  <div class="ctx-item" onclick="ctxRename()"><span class="ctx-icon">✏️</span> Rename</div>
+  <div class="ctx-item" onclick="ctxDuplicate()"><span class="ctx-icon">⧉</span> Duplicate</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-label">Rotate</div>
+  <div class="ctx-item" onclick="ctxRotate(90)"><span class="ctx-icon">↻</span> +90°</div>
+  <div class="ctx-item" onclick="ctxRotate(-90)"><span class="ctx-icon">↺</span> −90°</div>
+  <div class="ctx-item" onclick="ctxFlipH()"><span class="ctx-icon">↔</span> Flip Horizontal</div>
+  <div class="ctx-dial-wrap">
+    <div class="ctx-dial-row">
+      <canvas id="dialCanvas" class="dial-canvas" width="60" height="60"></canvas>
+      <div><div class="dial-readout" id="dialReadout">0°</div><div class="dial-sub">drag to rotate</div></div>
+    </div>
+    <button class="dial-apply-btn" onclick="ctxApplyDial()">Apply Rotation</button>
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-label">Scale</div>
+  <div class="ctx-scale-wrap">
+    <div class="ctx-scale-row">
+      <span style="font-size:10px;color:var(--text-lo)">10%</span>
+      <input type="range" id="ctxScaleSlider" min="10" max="300" value="100" oninput="onScaleSlider(this.value)" onclick="event.stopPropagation()">
+      <span style="font-size:10px;color:var(--text-lo)">300%</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="ctx-scale-readout" id="ctxScaleReadout">100%</span>
+      <button class="ctx-scale-apply" onclick="ctxApplyScale()">Apply Scale</button>
+    </div>
+    <button onclick="ctxRevertSize()" style="width:100%;margin-top:4px;padding:4px 0;border-radius:5px;border:1px solid var(--sys-border);background:none;color:var(--text-md);font-size:10px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600;">↩ Revert to Original Size</button>
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-label">Arrange</div>
+  <div class="ctx-item" onclick="ctxBringToFront()"><span class="ctx-icon">⬆</span> Bring to Front</div>
+  <div class="ctx-item" onclick="ctxSendToBack()"><span class="ctx-icon">⬇</span> Send to Back</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" onclick="ctxDelete()"><span class="ctx-icon">🗑</span> Delete</div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ══════════════════════════════════════════
+     PRE-INIT: Move DOM elements for mobile
+     Runs synchronously before app.js / map.js
+══════════════════════════════════════════════ -->
+<script>
+(function() {
+  var IS_MOBILE = window.innerWidth <= 768;
+  if (!IS_MOBILE) return;
+
+  // Move #mapCanvas into mobile map container
+  var mc = document.getElementById('mapCanvas');
+  var mapDest = document.getElementById('m-mapContainer');
+  if (mc && mapDest) {
+    mc.style.position = 'absolute';
+    mc.style.inset = '0';
+    mc.style.zIndex = '1';
+    mapDest.appendChild(mc);
+  }
+
+  // Move #timeGrid into mobile schedule container
+  var tg = document.getElementById('timeGrid');
+  var schedDest = document.getElementById('m-schedGrid');
+  if (tg && schedDest) {
+    schedDest.appendChild(tg);
+  }
+
+  // Mirror weekLabel to mWeekLabel via a proxy
+  // (app.js sets weekLabel, we'll sync it after render)
+  var origWL = document.getElementById('weekLabel');
+  if (origWL) {
+    var observer = new MutationObserver(function() {
+      var mwl = document.getElementById('mWeekLabel');
+      if (mwl) mwl.textContent = origWL.textContent;
+    });
+    observer.observe(origWL, { childList: true, characterData: true, subtree: true });
+  }
+})();
+</script>
+
+<script src="app.js"></script>
+<script src="map.js"></script>
+<script src="db.js"></script>
+
+<!-- ══════════════════════════════════════════
+     VIEWPORT-CROSSING GUARD
+     Signs the user out and redirects to Login
+     if the viewport crosses the 768 px breakpoint
+     (i.e. DevTools device-toolbar toggled while
+     the app is open). Prevents mobile/desktop
+     dual-DOM mismatch bugs entirely.
+══════════════════════════════════════════════ -->
+<script>
+(function () {
+  // Snapshot which "side" of the breakpoint we started on.
+  // true  = mobile (≤ 768 px)
+  // false = desktop (> 768 px)
+  var _startedMobile = window.innerWidth <= 768;
+  var _guardTripped  = false;
+
+  async function _forceSignOut(reason) {
+    if (_guardTripped) return;   // run only once
+    _guardTripped = true;
+
+    // Best-effort Supabase sign-out — emgoDb may not be ready yet if
+    // this fires very early, so we guard with typeof.
+    try {
+      if (typeof emgoDb !== 'undefined') {
+        await emgoDb.auth.signOut();
+      }
+    } catch (e) { /* ignore */ }
+
+    // Clear any pending-reset flag so Login.html shows the sign-in form.
+    try { localStorage.removeItem('pendingPasswordReset'); } catch (e) {}
+
+    // Redirect — use replace() so Back button can't return to the broken state.
+    window.location.replace('Login.html');
+  }
+
+  // Debounce resize so rapid intermediate sizes (e.g. dragging the DevTools
+  // panel edge) don't fire the guard prematurely.
+  var _resizeTimer = null;
+
+  window.addEventListener('resize', function () {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(function () {
+      var nowMobile = window.innerWidth <= 768;
+      // Only trigger when we cross the breakpoint, not on same-side resizes
+      // (e.g. changing desktop window width while staying above 768 px).
+      if (nowMobile !== _startedMobile) {
+        _forceSignOut('viewport breakpoint crossed');
+      }
+    }, 150); // 150 ms debounce — fast enough to feel instant, not noisy
+  });
+})();
+</script>
+
+<!-- ══════════════════════════════════════════
+     GLOBAL MOBILE FUNCTION STUBS
+     These are no-ops on desktop; the mobile IIFE below replaces them
+     on devices where innerWidth <= 768. Without these stubs, any
+     onclick="mSwitchTab(...)" in the hidden mobile shell would throw
+     a ReferenceError if the IIFE hasn't run yet or the device is
+     just over the 768px breakpoint.
+══════════════════════════════════════════════ -->
+<script>
+(function () {
+  var noop = function () {};
+  [
+    'mSwitchTab', 'mCreateAction', 'mSwitchEvent', 'mLoadEvent',
+    'mToggleFinished', 'mRefreshEventSelector', 'setMobileEventFilter',
+    'renderMobileEvents', 'renderMobileAttendees', 'filterMobileAttendeesByStatus',
+    'mTogglePinMode', 'mToggleSharePinMode', 'mMapSearchGo',
+    'toggleMapSheet', 'toggleLiveLocation',
+    'openQrScanner', 'closeQrScanner',
+    'openCodeModal', 'closeCodeModal', 'handleCodeEntry',
+  ].forEach(function (fn) {
+    if (!window[fn]) window[fn] = noop;
+  });
+})();
+</script>
+
+<!-- ══════════════════════════════════════════
+     MOBILE JS (only runs on mobile screens)
+══════════════════════════════════════════════ -->
+<script>
+(function() {
+  if (window.innerWidth > 768) return; // desktop: do nothing
+
+  // ── Hide desktop shell, show mobile ──────────────────────────
+  var shell = document.getElementById('mobileShell');
+  if (shell) shell.style.visibility = 'hidden'; // hide until auth check passes
+
+  // ── Avatar sync: db.js sets .avatar via querySelector ────────
+  // db.js picks first .avatar in DOM (desktop nav, display:none).
+  // We mirror its content to mobileAvatar.
+  function syncAvatar() {
+    var src = document.querySelector('.avatar');
+    var dest = document.getElementById('mobileAvatar');
+    if (src && dest && src !== dest) {
+      dest.textContent = src.textContent;
+      dest.title = src.title;
+    }
+  }
+  // Poll until populated
+  var avatarInterval = setInterval(function() {
+    var a = document.querySelector('.avatar');
+    if (a && a.textContent && a.textContent !== 'ME') {
+      syncAvatar(); clearInterval(avatarInterval);
+    }
+  }, 300);
+
+  // ── Tab state ─────────────────────────────────────────────────
+  var _currentMTab = 'events';
+  var _mapSheetOpen = false;
+  var _mFinishedOpen = false;
+
+  // ── switchPanel override (block 'venue' on mobile) ───────────
+  var _origSwitchPanel = window.switchPanel;
+  window.switchPanel = function(name, el) {
+    if (name === 'venue') return;
+    var tabEl = document.getElementById('mtab-' + name);
+    if (tabEl) mSwitchTab(name, tabEl);
+    else if (typeof _origSwitchPanel === 'function') _origSwitchPanel(name, el);
+  };
+
+  // ── Tab switching ─────────────────────────────────────────────
+  window.mSwitchTab = function(name, tabEl) {
+    _currentMTab = name;
+    document.querySelectorAll('.m-panel').forEach(function(p){ p.classList.remove('active'); });
+    document.querySelectorAll('.m-tab').forEach(function(t){
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
+    });
+    var panel = document.getElementById('m-panel-' + name);
+    if (panel) panel.classList.add('active');
+    if (tabEl) {
+      tabEl.classList.add('active');
+      tabEl.setAttribute('aria-selected', 'true');
+    }
+
+    var fab = document.getElementById('mCreateFab');
+    if (fab) fab.style.display = (name === 'events' || name === 'attendees' || name === 'schedule') ? 'flex' : 'none';
+
+    if (name === 'map') {
+      // Call invalidateSize twice: immediately after the panel shows,
+      // and again after any CSS transition has finished (~300 ms).
+      // This fixes the blank-map bug caused by Leaflet initialising
+      // while the panel was hidden (0×0 dimensions).
+      setTimeout(function() {
+        if (window._leafletMap) window._leafletMap.invalidateSize({ animate: false });
+      }, 80);
+      setTimeout(function() {
+        if (window._leafletMap) window._leafletMap.invalidateSize({ animate: false });
+      }, 350);
+    }
+    if (name === 'schedule') { if (typeof renderSchedule === 'function') renderSchedule(); }
+    if (name === 'events') renderMobileEvents();
+    if (name === 'attendees') renderMobileAttendees();
+  };
+
+  window.mCreateAction = function() {
+    if (_currentMTab === 'events') openModal('new-event-modal');
+    else if (_currentMTab === 'attendees') openModal('att-modal');
+    else if (_currentMTab === 'schedule') openModal('sched-modal');
+  };
+
+  // ── openModal / closeModal overrides (bottom sheet style) ────
+  var _origOpenModal = window.openModal;
+  window.openModal = function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('open');
+    el.style.display = 'flex';
+  };
+  var _origCloseModal = window.closeModal;
+  window.closeModal = function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('open');
+    el.style.display = 'none';
+  };
+
+  // ── Event selector refresh ────────────────────────────────────
+  window.mRefreshEventSelector = function() {
+    var sel = document.getElementById('mEventSel');
+    if (!sel || typeof eventsData === 'undefined') return;
+    sel.innerHTML = eventsData.map(function(ev) {
+      return '<option value="' + ev.id + '"' + (ev.id === activeEventId ? ' selected' : '') + '>' + ev.name + '</option>';
+    }).join('');
+    if (!eventsData.length) sel.innerHTML = '<option value="">No events yet</option>';
+  };
+
+  window.mSwitchEvent = function(evId) {
+    if (!evId) return;
+    if (typeof loadEventData === 'function') loadEventData(parseInt(evId));
+    renderMobileEvents();
+    renderMobileAttendees();
+  };
+
+  // ── Mobile event renderer ─────────────────────────────────────
+  var colMap = { professional:'c-indigo', social:'c-amber', community:'c-violet', personal:'c-teal', family:'c-teal', other:'c-amber' };
+  var typeLabels = { professional:'💼 Professional', social:'🎉 Social', personal:'🧘 Personal', community:'🌍 Community', family:'🏠 Family', other:'✨ Other' };
+
+  function statusBadge(s) {
+    if (s === 'finished') return '<span class="ev-tag" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.25)">✅ Finished</span>';
+    if (s === 'draft')    return '<span class="ev-tag tag-draft">◦ Draft</span>';
+    return '<span class="ev-tag tag-upcoming">⏳ Upcoming</span>';
+  }
+
+  // openEditEventModal: mobile alias for the desktop openEditEvent function
+  window.openEditEventModal = function(id) {
+    if (typeof openEditEvent === 'function') {
+      openEditEvent(id);
+    } else {
+      if (typeof showToast === 'function') showToast('⚠ Edit not available', 'warn');
+    }
+  };
+
+  window.renderMobileEvents = function() {
+    var container = document.getElementById('mEvList');
+    if (!container || typeof eventsData === 'undefined') return;
+
+    var filterVal = (document.querySelector('.m-chip[data-filter].active') || {dataset:{filter:'all'}}).dataset.filter || 'all';
+    var search = (document.getElementById('mEvSearch') ? document.getElementById('mEvSearch').value : '').toLowerCase();
+    var sortVal = document.getElementById('mEvSortSel') ? document.getElementById('mEvSortSel').value : 'date';
+
+    var list = eventsData.slice();
+    if (filterVal === 'finished') {
+      list = list.filter(function(e){ return e.status === 'finished'; });
+    } else if (filterVal !== 'all') {
+      list = list.filter(function(e){ return e.type === filterVal && e.status !== 'finished'; });
+    } else {
+      list = list.filter(function(e){ return e.status !== 'finished'; });
+    }
+    if (search) list = list.filter(function(e){ return (e.name + ' ' + (e.venue||'') + ' ' + (e.desc||'')).toLowerCase().includes(search); });
+    if (sortVal === 'name') list.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    else if (sortVal === 'status') list.sort(function(a,b){ return (a.status||'').localeCompare(b.status||''); });
+    else list.sort(function(a,b){ return (a.date||'z').localeCompare(b.date||'z'); });
+
+    if (!list.length) {
+      container.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-lo);font-size:13px;">No events found.<br><span style="font-size:11px;">Tap ＋ to create one.</span></div>';
+    } else {
+      container.innerHTML = list.map(function(ev) {
+        var colorClass = colMap[ev.type] || 'c-indigo';
+        var dateStr = ev.date ? new Date(ev.date + 'T00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'Date TBD';
+        var isActive = ev.id === activeEventId;
+        return '<div class="m-ev-card ' + colorClass + '" onclick="mLoadEvent(' + ev.id + ')">' +
+          (isActive ? '<div style="position:absolute;top:8px;right:8px;font-size:9px;background:var(--primary-dim);color:var(--primary-light);padding:2px 7px;border-radius:20px;font-weight:700;">Active</div>' : '') +
+          '<div class="ev-name">' + ev.name + '</div>' +
+          '<div class="ev-meta">📅 ' + dateStr + (ev.venue ? ' · ' + ev.venue : '') + (ev.attendees ? ' · ' + ev.attendees + ' att.' : '') + '</div>' +
+          '<div class="ev-tags">' +
+            '<span class="ev-tag" style="background:' + (ev.color||'#5b5bd6') + '22;color:' + (ev.color||'#5b5bd6') + ';border:1px solid ' + (ev.color||'#5b5bd6') + '44">' + (typeLabels[ev.type]||ev.type) + '</span>' +
+            statusBadge(ev.status) +
+            (ev.status === 'upcoming' && ev.date && new Date(ev.date + 'T00:00') <= new Date() ? '<span class="ev-tag tag-live"><span class="pulse-dot"></span>Live</span>' : '') +
+          '</div>' +
+          (ev.desc ? '<div style="font-size:11px;color:var(--text-lo);margin-top:8px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + ev.desc + '</div>' : '') +
+          '<div class="ev-actions">' +
+            (ev.status !== 'finished' ? '<div class="ev-act-btn primary" onclick="event.stopPropagation();openEditEventModal(' + ev.id + ')">✏️ Edit</div>' : '') +
+            '<div class="ev-act-btn" onclick="event.stopPropagation();(function(){if(typeof markEventFinished===\'function\')markEventFinished(' + ev.id + ');var _mev=eventsData.find(function(e){return e.id===' + ev.id + ';});if(_mev&&typeof dbUpdateEvent===\'function\')dbUpdateEvent(_mev);renderMobileEvents();})()">' + (ev.status === 'finished' ? '↩ Upcoming' : '✅ Finish') + '</div>' +
+            '<div class="ev-act-btn danger" onclick="event.stopPropagation();deleteEvent(' + ev.id + ')">🗑</div>' +
+          '</div></div>';
+      }).join('');
+    }
+
+    // Finished section
+    var finished = eventsData.filter(function(e){ return e.status === 'finished'; });
+    var finSec = document.getElementById('mFinishedEvSection');
+    var finGrid = document.getElementById('mFinishedEvGrid');
+    var finCount = document.getElementById('mFinishedCount');
+    if (finSec && filterVal !== 'finished') {
+      finSec.style.display = finished.length ? 'block' : 'none';
+      if (finCount) finCount.textContent = finished.length;
+      if (finGrid) finGrid.innerHTML = finished.map(function(ev) {
+        return '<div class="m-ev-card ' + (colMap[ev.type]||'c-indigo') + '" style="opacity:.7" onclick="mLoadEvent(' + ev.id + ')">' +
+          '<div class="ev-name">' + ev.name + '</div>' +
+          '<div class="ev-meta">' + (ev.date ? new Date(ev.date+'T00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'TBD') + (ev.venue?' · '+ev.venue:'') + '</div>' +
+          '<div class="ev-tags">' + statusBadge(ev.status) + '</div>' +
+          '<div class="ev-actions">' +
+            '<div class="ev-act-btn" onclick="event.stopPropagation();(function(){if(typeof markEventFinished===\'function\')markEventFinished(' + ev.id + ');var _mev=eventsData.find(function(e){return e.id===' + ev.id + ';});if(_mev&&typeof dbUpdateEvent===\'function\')dbUpdateEvent(_mev);renderMobileEvents();})()">↩ Upcoming</div>' +
+            '<div class="ev-act-btn danger" onclick="event.stopPropagation();deleteEvent(' + ev.id + ')">🗑</div>' +
+          '</div></div>';
+      }).join('');
+    }
+
+    mRefreshEventSelector();
+  };
+
+  window.mLoadEvent = function(evId) {
+    if (typeof loadEventData === 'function') loadEventData(evId);
+    renderMobileEvents();
+    renderMobileAttendees();
+    var ev = eventsData.find(function(e){ return e.id === evId; });
+    if (typeof showToast === 'function') showToast('📋 Loaded: ' + (ev ? ev.name : ''), 'info');
+  };
+
+  window.mToggleFinished = function() {
+    _mFinishedOpen = !_mFinishedOpen;
+    var grid = document.getElementById('mFinishedEvGrid');
+    var chev = document.getElementById('mFinishedChevron');
+    if (grid) grid.style.display = _mFinishedOpen ? 'flex' : 'none';
+    if (chev) chev.textContent = _mFinishedOpen ? '▲' : '▼';
+  };
+
+  window.setMobileEventFilter = function(el) {
+    document.querySelectorAll('.m-chip[data-filter]').forEach(function(c){ c.classList.remove('active'); });
+    el.classList.add('active');
+    renderMobileEvents();
+  };
+
+  // ── Hook renderEvents to also render mobile cards ─────────────
+  var _origRenderEvents = window.renderEvents;
+  window.renderEvents = function() {
+    if (typeof _origRenderEvents === 'function') _origRenderEvents();
+    renderMobileEvents();
+    mRefreshEventSelector();
+  };
+
+  // ── Mobile attendees renderer ─────────────────────────────────
+  var _mAttFilter = '';
+  var _mAttStatusFilter = '';
+
+  window.renderMobileAttendees = function(searchQ, statusQ) {
+    if (searchQ !== undefined) _mAttFilter = searchQ || '';
+    if (statusQ !== undefined) _mAttStatusFilter = statusQ || '';
+
+    var container = document.getElementById('mAttList');
+    if (!container || typeof attendees === 'undefined') return;
+
+    var list = attendees.slice();
+    if (_mAttFilter) list = list.filter(function(a){ return (a.first+' '+a.last+' '+(a.email||'')).toLowerCase().includes(_mAttFilter.toLowerCase()); });
+    if (_mAttStatusFilter) list = list.filter(function(a){ return a.status === _mAttStatusFilter; });
+
+    if (!list.length) {
+      container.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-lo);font-size:13px;">No attendees yet.<br><span style="font-size:11px;">Tap ＋ to add one.</span></div>';
+      return;
+    }
+    container.innerHTML = list.map(function(att) {
+      var initials = ((att.first||'')[0]||'') + ((att.last||'')[0]||'');
+      var statusColor = att.status === 'Confirmed' ? '#22c55e' : att.status === 'Checked In' ? '#3b82f6' : '#f59e0b';
+      return '<div class="m-att-card">' +
+        '<div class="m-att-avatar">' + initials.toUpperCase() + '</div>' +
+        '<div class="m-att-info">' +
+          '<div class="m-att-name">' + att.first + ' ' + att.last + '</div>' +
+          '<div class="m-att-sub">' + (att.role||'Guest') + (att.email ? ' · ' + att.email : '') + '</div>' +
+        '</div>' +
+        '<div class="m-att-status">' +
+         '<span class="m-att-badge" style="background:' + statusColor + '22;color:' + statusColor + ';border:1px solid ' + statusColor + '44">' + att.status + '</span>' +
+          '<select style="font-size:9px;background:var(--sys-surface2);border:1px solid var(--sys-border);border-radius:5px;color:var(--text-md);padding:2px 4px;font-family:\'DM Sans\',sans-serif;" onchange="updateAttStatus(' + att.id + ',this.value)">' +
+            '<option' + (att.status==='Pending'?' selected':'') + '>Pending</option>' +
+            '<option' + (att.status==='Confirmed'?' selected':'') + '>Confirmed</option>' +
+            '<option' + (att.status==='Checked In'?' selected':'') + '>Checked In</option>' +
+          '</select>' +
+        '</div>' +
+        '<button class="m-att-del" onclick="removeAtt(' + att.id + ')">🗑</button>' +
+      '</div>';
+    }).join('');
+  };
+
+  window.filterMobileAttendeesByStatus = function(s) { renderMobileAttendees(undefined, s); };
+
+  var _origRenderAttendees = window.renderAttendees;
+  window.renderAttendees = function(list) {
+    if (typeof _origRenderAttendees === 'function') _origRenderAttendees(list);
+    renderMobileAttendees();
+  };
+
+  // ── updateOverview hook ───────────────────────────────────────
+  var _origUpdateOverview = window.updateOverview;
+  window.updateOverview = function() {
+    if (typeof _origUpdateOverview === 'function') _origUpdateOverview();
+    mRefreshEventSelector();
+  };
+
+  // ── Map sheet ─────────────────────────────────────────────────
+  window.toggleMapSheet = function() {
+    _mapSheetOpen = !_mapSheetOpen;
+    var sheet = document.getElementById('mMapSheet');
+    if (sheet) sheet.classList.toggle('open', _mapSheetOpen);
+  };
+
+  // Close sheet on map tap
+  var mMapContainer = document.getElementById('m-mapContainer');
+  if (mMapContainer) {
+    mMapContainer.addEventListener('click', function() {
+      if (_mapSheetOpen) { _mapSheetOpen = false; var s = document.getElementById('mMapSheet'); if(s) s.classList.remove('open'); }
+    });
+  }
+
+  // ── Map search (uses desktop mapSearchInput) ─────────────────
+  window.mMapSearchGo = function() {
+    var inp = document.getElementById('mMapSearchInput');
+    if (!inp) return;
+    // mirror to desktop input and call mapSearchGo
+    var desktopInp = document.getElementById('mapSearchInput');
+    if (desktopInp) desktopInp.value = inp.value;
+    if (typeof mapSearchGo === 'function') mapSearchGo();
+  };
+
+  // ── Mobile pin mode (wraps map.js's togglePinMode) ───────────
+  window.mTogglePinMode = function() {
+    if (typeof togglePinMode === 'function') togglePinMode();
+    // mirror active state to mobile FAB
+    setTimeout(function() {
+      var desktopBtn = document.getElementById('mapPinModeBtn');
+      var mobileBtn = document.getElementById('mPinModeBtn');
+      if (desktopBtn && mobileBtn) {
+        mobileBtn.classList.toggle('active-fab', desktopBtn.classList.contains('active'));
+        var bar = document.getElementById('mMapModeBar');
+        if (bar) bar.style.display = desktopBtn.classList.contains('active') ? 'block' : 'none';
+      }
+    }, 50);
+  };
+
+  window.mToggleSharePinMode = function() {
+    if (typeof toggleSharePinMode === 'function') toggleSharePinMode();
+    setTimeout(function() {
+      var desktopBtn = document.getElementById('mapSharePinModeBtn');
+      var mobileBtn = document.getElementById('mSharePinModeBtn');
+      if (desktopBtn && mobileBtn) {
+        mobileBtn.classList.toggle('active-fab', desktopBtn.classList.contains('active'));
+        var bar = document.getElementById('mMapShareModeBar');
+        if (bar) bar.style.display = desktopBtn.classList.contains('active') ? 'block' : 'none';
+      }
+    }, 50);
+  };
+
+  // Mirror desktop pin lists to mobile sheet
+  var _origRenderMapPins = window.renderMapPins;
+  if (typeof _origRenderMapPins === 'function') {
+    window.renderMapPins = function() {
+      _origRenderMapPins();
+      // mirror desktop pin count + list to mobile sheet
+      var dPinCount = document.getElementById('pinCount');
+      var mPinCount = document.getElementById('mPinCount');
+      if (dPinCount && mPinCount) mPinCount.textContent = dPinCount.textContent;
+      var dPinsList = document.getElementById('pinsList');
+      var mPinsList = document.getElementById('mPinsList');
+      if (dPinsList && mPinsList) mPinsList.innerHTML = dPinsList.innerHTML;
+      var dShareCount = document.getElementById('sharePinCount');
+      var mShareCount = document.getElementById('mSharePinCount');
+      if (dShareCount && mShareCount) mShareCount.textContent = dShareCount.textContent;
+      var dShareList = document.getElementById('sharePinsList');
+      var mShareList = document.getElementById('mSharePinsList');
+      if (dShareList && mShareList) mShareList.innerHTML = dShareList.innerHTML;
+    };
+  }
+
+  // ── Live Location ─────────────────────────────────────────────
+  var _liveWatchId = null;
+  var _liveMarker  = null;
+  var _liveCircle  = null;
+  var _liveActive  = false;
+
+  window.toggleLiveLocation = function() {
+    var fab = document.getElementById('mLiveFab');
+    if (_liveActive) {
+      if (_liveWatchId !== null) { navigator.geolocation.clearWatch(_liveWatchId); _liveWatchId = null; }
+      if (_liveMarker) { _liveMarker.remove(); _liveMarker = null; }
+      if (_liveCircle) { _liveCircle.remove(); _liveCircle = null; }
+      _liveActive = false;
+      if (fab) fab.classList.remove('active-fab');
+      if (typeof showToast === 'function') showToast('📡 Live location stopped', 'info');
+    } else {
+      if (!navigator.geolocation) { if (typeof showToast === 'function') showToast('⚠ Geolocation not supported', 'warn'); return; }
+      _liveActive = true;
+      if (fab) fab.classList.add('active-fab');
+      if (typeof showToast === 'function') showToast('📡 Getting your location…', 'info');
+      _liveWatchId = navigator.geolocation.watchPosition(
+        function(pos) {
+          var lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
+          if (!_liveMarker && window._leafletMap) {
+            var dotIcon = L.divIcon({ html: '<div class="live-loc-dot"></div>', className: '', iconSize: [16,16], iconAnchor: [8,8] });
+            _liveMarker = L.marker([lat,lng], { icon: dotIcon, zIndexOffset: 1000 }).addTo(window._leafletMap);
+            _liveMarker.bindPopup('<b>📡 Your Location</b><br><small>Accuracy: ' + Math.round(acc) + 'm</small>');
+            _liveCircle = L.circle([lat,lng], { radius: acc, color:'#3b82f6', fillColor:'#3b82f6', fillOpacity:0.1, weight:1 }).addTo(window._leafletMap);
+            window._leafletMap.setView([lat,lng], 16, { animate: true });
+            if (typeof showToast === 'function') showToast('📡 Live location active', 'success');
+          } else if (_liveMarker) {
+            _liveMarker.setLatLng([lat,lng]);
+            if (_liveMarker.getPopup()) _liveMarker.getPopup().setContent('<b>📡 Your Location</b><br><small>Accuracy: ' + Math.round(acc) + 'm</small>');
+            if (_liveCircle) { _liveCircle.setLatLng([lat,lng]).setRadius(acc); }
+          }
+        },
+        function(err) {
+          _liveActive = false;
+          if (fab) fab.classList.remove('active-fab');
+          if (typeof showToast === 'function') showToast('⚠ Location error: ' + err.message, 'warn');
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+      );
+    }
+  };
+
+  // ── QR Scanner ───────────────────────────────────────────────
+  var _qrStream = null;
+  var _qrAnimFrame = null;
+
+  window.openQrScanner = function() {
+    var overlay = document.getElementById('qrOverlay');
+    overlay.classList.add('open');
+    overlay.style.display = 'flex';
+    var video = document.getElementById('qrVideo');
+    var canvas = document.getElementById('qrCanvas');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .then(function(stream) {
+        _qrStream = stream;
+        video.srcObject = stream;
+        video.play();
+        video.addEventListener('loadedmetadata', function() { _qrScanFrame(video, canvas); }, { once: true });
+      })
+      .catch(function(err) {
+        closeQrScanner();
+        if (typeof showToast === 'function') showToast('⚠ Camera access denied: ' + err.message, 'warn');
+      });
+  };
+
+  function _qrScanFrame(video, canvas) {
+    var overlay = document.getElementById('qrOverlay');
+    if (!overlay || !overlay.classList.contains('open')) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      if (window.jsQR) {
+        var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+        if (code) { _handleQrResult(code.data); return; }
+      }
+    }
+    _qrAnimFrame = requestAnimationFrame(function(){ _qrScanFrame(video, canvas); });
+  }
+
+  function _handleQrResult(data) {
+    closeQrScanner();
+    try {
+      var payload = JSON.parse(data);
+      if (payload.app === 'emgo' && payload.lat && payload.lng) {
+        if (typeof showToast === 'function') showToast('📍 Found: ' + (payload.name||'Location') + ' — navigating…', 'success');
+        mSwitchTab('map', document.getElementById('mtab-map'));
+        setTimeout(function() {
+          if (window._leafletMap) {
+            window._leafletMap.setView([payload.lat, payload.lng], 17, { animate: true });
+            L.popup({ maxWidth: 220 })
+              .setLatLng([payload.lat, payload.lng])
+              .setContent('<b>📍 ' + (payload.name||'Location') + '</b>' + (payload.addr ? '<br><small>' + payload.addr + '</small>' : '') + (payload.code ? '<br><small style="color:#16a34a;font-weight:700;">' + payload.code + '</small>' : ''))
+              .openOn(window._leafletMap);
+          }
+        }, 200);
+      } else {
+        if (typeof showToast === 'function') showToast('⚠ Not an EmGo QR code', 'warn');
+      }
+    } catch(e) {
+      if (data && data.length <= 10 && /^[A-Z0-9]+$/i.test(data.trim())) {
+        _resolveShareCode(data.trim().toUpperCase());
+      } else {
+        if (typeof showToast === 'function') showToast('⚠ Unrecognised QR code', 'warn');
+      }
+    }
+  }
+
+  window.closeQrScanner = function() {
+    var overlay = document.getElementById('qrOverlay');
+    if (overlay) { overlay.classList.remove('open'); overlay.style.display = 'none'; }
+    if (_qrAnimFrame) { cancelAnimationFrame(_qrAnimFrame); _qrAnimFrame = null; }
+    if (_qrStream) { _qrStream.getTracks().forEach(function(t){ t.stop(); }); _qrStream = null; }
+  };
+
+  // ── Enter Code modal ──────────────────────────────────────────
+  window.openCodeModal = function() {
+    var el = document.getElementById('codeModal');
+    if (el) { el.classList.add('open'); el.style.display = 'flex'; }
+    setTimeout(function(){ var i = document.getElementById('codeInput'); if(i) i.focus(); }, 100);
+  };
+  window.closeCodeModal = function() {
+    var el = document.getElementById('codeModal');
+    if (el) { el.classList.remove('open'); el.style.display = 'none'; }
+    var i = document.getElementById('codeInput');
+    if (i) i.value = '';
+  };
+  window.handleCodeEntry = function() {
+    var code = (document.getElementById('codeInput') ? document.getElementById('codeInput').value : '').trim().toUpperCase();
+    if (!code) { if (typeof showToast === 'function') showToast('⚠ Enter a code', 'warn'); return; }
+    _resolveShareCode(code);
+    closeCodeModal();
+  };
+
+  function _resolveShareCode(code) {
+    var found = null;
+    if (typeof eventSharePins !== 'undefined') {
+      for (var evId in eventSharePins) {
+        var pin = (eventSharePins[evId]||[]).find(function(p){ return (p.code||'').toUpperCase() === code; });
+        if (pin) { found = pin; break; }
+      }
+    }
+    if (!found && typeof sharePins !== 'undefined') {
+      found = sharePins.find(function(p){ return (p.code||'').toUpperCase() === code; });
+    }
+    if (found) {
+      if (typeof showToast === 'function') showToast('📍 Found: ' + found.name + ' — navigating…', 'success');
+      mSwitchTab('map', document.getElementById('mtab-map'));
+      setTimeout(function() {
+        if (window._leafletMap && found.lat && found.lng) window._leafletMap.setView([found.lat, found.lng], 17, { animate: true });
+      }, 200);
+    } else {
+      if (typeof showToast === 'function') showToast('❌ Code "' + code + '" not found in your pins', 'warn');
+    }
+  }
+
+  // ── Auth guard ────────────────────────────────────────────────
+  async function _checkSession() {
+    try {
+      var res = await emgoDb.auth.getSession();
+      if (res.data && res.data.session) {
+        if (localStorage.getItem('pendingPasswordReset')) {
+          window.location.replace('Login.html');
+        } else {
+          if (shell) shell.style.visibility = 'visible';
+        }
+      } else {
+        window.location.replace('Login.html');
+      }
+    } catch(e) {
+      window.location.replace('Login.html');
+    }
+  }
+  _checkSession();
+  window.addEventListener('pageshow', function(e){ if (e.persisted) _checkSession(); });
+
+  // ── Initial render after db.js loads data ────────────────────
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      renderMobileEvents();
+      renderMobileAttendees();
+      mRefreshEventSelector();
+      syncAvatar();
+      var fab = document.getElementById('mCreateFab');
+      if (fab) fab.style.display = 'flex';
+      // invalidate map after layout settles
+      if (window._leafletMap) window._leafletMap.invalidateSize();
+    }, 300);
+  });
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EmGo — How It Works</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+
+<style>
+/* ══════════════════════════════════════════
+   DESIGN TOKENS — matches EmGo global theme
+══════════════════════════════════════════ */
+:root {
+  --bg:            #0f0f13;
+  --surface1:      #16161e;
+  --surface2:      #1c1c27;
+  --surface3:      #22222f;
+  --sys-border:    rgba(255,255,255,0.08);
+  --primary:       #5b5bd6;
+  --primary-light: #7c7ce8;
+  --primary-dim:   rgba(91,91,214,0.18);
+  --text-hi:       #f0f0f5;
+  --text-md:       #9999b8;
+  --text-lo:       #55556a;
+  --success:       #22c55e;
+  --warning:       #f59e0b;
+  --danger:        #ef4444;
+  --radius:        12px;
+  --radius-lg:     18px;
+  --card-bg:       rgba(22,22,30,0.92);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text-hi);
+  overflow: hidden;
+}
+
+/* ── Background grain + glow ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 20%, rgba(91,91,214,0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(124,124,232,0.07) 0%, transparent 60%);
+}
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+.tut-shell {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 20px 16px;
+  gap: 0;
+}
+
+/* ── Header ── */
+.tut-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sys-border);
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.tut-logo {
+  display: flex; align-items: center; gap: 10px;
+}
+
+.tut-logo-mark {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  background: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800; font-size: 13px;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(91,91,214,0.45);
+}
+
+.tut-logo-text {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800; font-size: 18px;
+  color: var(--text-hi);
+}
+
+.tut-logo-sub {
+  font-size: 10px; color: var(--text-lo);
+  letter-spacing: 0.5px; margin-top: 1px;
+}
+
+.tut-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--primary-light);
+  background: var(--primary-dim);
+  border: 1px solid rgba(91,91,214,0.3);
+  border-radius: 20px;
+  padding: 5px 12px;
+}
+
+/* ── Step counter bar ── */
+.step-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.step-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--surface3);
+  border: 1px solid var(--sys-border);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.step-dot.active {
+  width: 24px; border-radius: 3px;
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 8px rgba(91,91,214,0.5);
+}
+
+.step-dot.done {
+  background: var(--primary-light);
+  border-color: var(--primary-light);
+  opacity: 0.5;
+}
+
+.step-counter {
+  margin-left: auto;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  color: var(--text-lo);
+  letter-spacing: 0.5px;
+}
+
+.step-counter span { color: var(--primary-light); }
+
+/* ── Main card ── */
+.step-card {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+
+.step-card.active { display: flex; }
+
+.card-inner {
+  background: var(--card-bg);
+  border: 1px solid var(--sys-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  transition: box-shadow 0.3s ease;
+}
+
+/* ── Image pane ── */
+.card-img-pane {
+  width: 42%;
+  flex-shrink: 0;
+  position: relative;
+  background: var(--surface2);
+  border-right: 1px solid var(--sys-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.img-placeholder {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 18px,
+    rgba(255,255,255,0.015) 18px,
+    rgba(255,255,255,0.015) 36px
+  );
+}
+
+.img-placeholder img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: zoom-in;
+}
+
+.img-placeholder-icon {
+  font-size: 40px; opacity: 0.3;
+}
+
+.img-placeholder-label {
+  font-size: 10px;
+  font-family: 'Syne', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-lo);
+  text-align: center;
+  padding: 0 16px;
+}
+
+/* Image slot — drop your real screenshot here */
+.img-slot {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  position: absolute; inset: 0;
+  cursor: zoom-in;
+}
+
+/* ── Text pane ── */
+.card-text-pane {
+  flex: 1;
+  padding: 28px 28px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+
+.card-text-pane::-webkit-scrollbar { width: 4px; }
+.card-text-pane::-webkit-scrollbar-track { background: transparent; }
+.card-text-pane::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+
+.step-tab-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700;
+  font-family: 'Syne', sans-serif;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--primary-light);
+  background: var(--primary-dim);
+  border: 1px solid rgba(91,91,214,0.3);
+  border-radius: 20px;
+  padding: 4px 11px;
+  margin-bottom: 14px;
+  width: fit-content;
+}
+
+.step-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px; font-weight: 800;
+  color: var(--text-hi);
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.step-intro {
+  font-size: 13px;
+  color: var(--text-md);
+  line-height: 1.65;
+  margin-bottom: 20px;
+}
+
+/* Feature list */
+.feature-list {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-bottom: 18px;
+}
+
+.feature-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--sys-border);
+  border-radius: 10px;
+  padding: 10px 13px;
+  transition: border-color 0.2s;
+}
+
+.feature-item:hover { border-color: rgba(91,91,214,0.3); }
+
+.feature-icon {
+  font-size: 16px; flex-shrink: 0; margin-top: 1px;
+}
+
+.feature-text { flex: 1; }
+
+.feature-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 700;
+  color: var(--text-hi);
+  margin-bottom: 2px;
+}
+
+.feature-desc {
+  font-size: 11.5px;
+  color: var(--text-md);
+  line-height: 1.55;
+}
+
+/* Tips box */
+.tips-box {
+  background: rgba(245,158,11,0.07);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: 10px;
+  padding: 11px 14px;
+  display: flex; gap: 9px; align-items: flex-start;
+  margin-top: auto;
+}
+
+.tips-box-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+.tips-box-text {
+  font-size: 11.5px;
+  color: rgba(245,158,11,0.9);
+  line-height: 1.55;
+}
+
+.tips-box-text strong { color: #f59e0b; font-weight: 700; }
+
+/* ── Navigation footer ── */
+.tut-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 14px;
+  flex-shrink: 0;
+}
+
+.btn-nav {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 20px;
+  border-radius: 10px;
+  border: 1px solid var(--sys-border);
+  background: var(--surface2);
+  color: var(--text-md);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.btn-nav:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary-light);
+  background: var(--primary-dim);
+}
+
+.btn-nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.btn-nav-next {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(91,91,214,0.35);
+}
+
+.btn-nav-next:hover:not(:disabled) {
+  background: var(--primary-light);
+  border-color: var(--primary-light);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(91,91,214,0.5);
+}
+
+.btn-skip {
+  background: none; border: none;
+  color: var(--text-lo);
+  font-size: 12px; font-family: 'DM Sans', sans-serif;
+  cursor: pointer; padding: 6px 10px;
+  border-radius: 8px;
+  transition: color 0.2s;
+}
+
+.btn-skip:hover { color: var(--text-md); }
+
+/* ── Finish card ── */
+.finish-cta {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
+  flex: 1; gap: 14px;
+  padding: 24px;
+}
+
+.finish-icon {
+  font-size: 52px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.finish-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px; font-weight: 800;
+  color: var(--text-hi);
+  line-height: 1.2;
+}
+
+.finish-sub {
+  font-size: 13.5px; color: var(--text-md);
+  max-width: 420px; line-height: 1.65;
+}
+
+.finish-btn {
+  margin-top: 6px;
+  padding: 12px 32px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(91,91,214,0.4);
+  transition: all 0.2s;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
+}
+
+.finish-btn:hover {
+  background: var(--primary-light);
+  box-shadow: 0 8px 28px rgba(91,91,214,0.55);
+  transform: translateY(-1px);
+}
+
+/* ── Inline shortcut pills ── */
+.key {
+  display: inline-block;
+  background: var(--surface3);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 10.5px; font-family: 'Syne', sans-serif; font-weight: 700;
+  color: var(--text-hi);
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* ── Divider in text ── */
+.section-divider {
+  height: 1px;
+  background: var(--sys-border);
+  margin: 14px 0;
+}
+
+/* ══════════════════════════════════════════
+   LIGHTBOX
+══════════════════════════════════════════ */
+.lightbox {
+  display: none;
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  align-items: center; justify-content: center;
+  cursor: zoom-out;
+  animation: lbFadeIn 0.2s ease;
+}
+.lightbox.open { display: flex; }
+@keyframes lbFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.lightbox img {
+  max-width: 92vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+  animation: lbZoomIn 0.22s cubic-bezier(.4,0,.2,1);
+  pointer-events: none;
+}
+@keyframes lbZoomIn {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+.lb-close {
+  position: absolute; top: 18px; right: 22px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: #f0f0f5;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.lb-close:hover { background: rgba(255,255,255,0.18); }
+.card-img-pane:has(img) { cursor: zoom-in; }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — mobile stacks vertically
+══════════════════════════════════════════ */
+@media (max-width: 620px) {
+  .tut-shell { padding: 14px 12px 12px; }
+  .card-inner { flex-direction: column; }
+  .card-img-pane { width: 100%; height: 180px; border-right: none; border-bottom: 1px solid var(--sys-border); }
+  .card-text-pane { padding: 18px 16px 14px; }
+  .step-title { font-size: 18px; }
+  .tut-logo-text { font-size: 15px; }
+}
+
+/* ══════════════════════════════════════════
+   SLIDE ANIMATION
+══════════════════════════════════════════ */
+.step-card { animation: none; }
+.step-card.slide-in-right { animation: slideInRight 0.28s cubic-bezier(.4,0,.2,1) forwards; }
+.step-card.slide-in-left  { animation: slideInLeft  0.28s cubic-bezier(.4,0,.2,1) forwards; }
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+</style>
+</head>
+<body>
+
+<div class="tut-shell">
+
+  <!-- ══ Header ══ -->
+  <header class="tut-header">
+    <div class="tut-logo">
+      <div class="tut-logo-mark">EM</div>
+      <div>
+        <div class="tut-logo-text">EmGo</div>
+        <div class="tut-logo-sub">Event Mapping</div>
+      </div>
+    </div>
+    <div class="tut-label">How It Works</div>
+  </header>
+
+  <!-- ══ Step indicator bar ══ -->
+  <div class="step-bar" id="stepBar">
+    <div class="step-dot active"  data-step="0" onclick="goTo(0)"></div>
+    <div class="step-dot"         data-step="1" onclick="goTo(1)"></div>
+    <div class="step-dot"         data-step="2" onclick="goTo(2)"></div>
+    <div class="step-dot"         data-step="3" onclick="goTo(3)"></div>
+    <div class="step-dot"         data-step="4" onclick="goTo(4)"></div>
+    <div class="step-dot"         data-step="5" onclick="goTo(5)"></div>
+    <div class="step-counter"><span id="stepNum">1</span> / 5</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       STEP 1 — Events Tab
+  ══════════════════════════════════════════════ -->
+  <div class="step-card active" id="step-0">
+    <div class="card-inner">
+
+      <!-- IMAGE PANE — replace the placeholder div with: <img class="img-slot" src="YOUR_IMAGE.png" alt="Events tab screenshot"> -->
+      <div class="card-img-pane">
+      
+
+               <img class="img-slot" src="images/Events.png" alt="Events Tab">
+      
+      </div>
+
+      <div class="card-text-pane">
+        <div class="step-tab-chip">📋 Tab 1 — Events</div>
+        <div class="step-title">Your Command Center for All Events</div>
+        <div class="step-intro">
+          The <strong>Events tab</strong> is the first thing you see after logging in. It's where you create, organize, and manage every event you're running. Think of it as your master list — everything else in EmGo flows from here.
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-icon">＋</div>
+            <div class="feature-text">
+              <div class="feature-title">Create Events</div>
+              <div class="feature-desc">Click <strong>+ Create Event</strong> (top right) to open the New Event modal. Give your event a name, date, type (Professional, Social, Personal, or Community), color accent, and description. All four types are color-coded for quick scanning.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⊞</div>
+            <div class="feature-text">
+              <div class="feature-title">Grid & List Views</div>
+              <div class="feature-desc">Toggle between <strong>Grid</strong> and <strong>List</strong> view using the sub-tabs below the filter bar. Grid shows visual cards with your event's color accent and key stats; List gives a compact row layout for quick scanning.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔍</div>
+            <div class="feature-text">
+              <div class="feature-title">Search & Filter</div>
+              <div class="feature-desc">Use the search bar to find events by name. Use the filter chips — <strong>All · Pro · Social · Personal · Community · Finished</strong> — to narrow the list. The Sort dropdown lets you order by Date, Name, Status, or Type.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">✅</div>
+            <div class="feature-text">
+              <div class="feature-title">Finished Events</div>
+              <div class="feature-desc">Events marked as <strong>Finished</strong> are automatically moved to a collapsible section at the bottom, keeping your active events clean and focused. Finished events become read-only across all tabs — venue, schedule, map, and attendees are all locked.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📊</div>
+            <div class="feature-text">
+              <div class="feature-title">Overview Sidebar</div>
+              <div class="feature-desc">The left sidebar shows a live <strong>Overview</strong> of your selected event: total Attendees (green), Venue Layers, Activities on the schedule, and any scheduling Conflicts (red). These numbers update automatically as you work.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tips-box">
+          <div class="tips-box-icon">💡</div>
+          <div class="tips-box-text"><strong>Pro tip:</strong> Click any event card to make it the <em>active event</em> — all other tabs (Schedule, Venue, Map, Attendees) then show data for that specific event only.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       STEP 2 — Schedule Tab
+  ══════════════════════════════════════════════ -->
+  <div class="step-card" id="step-1">
+    <div class="card-inner">
+      <div class="card-img-pane">
+        <div class="img-placeholder">
+          <!-- ★ REPLACE: <img class="img-slot" src="screenshots/schedule-tab.png" alt="Schedule Tab"> -->
+      <img class="img-slot" src="images/Schedule.png" alt="Events Tab">
+          <div class="img-placeholder-icon"></div>
+          <div class="img-placeholder-label">Place your Schedule Tab<br>screenshot here</div>
+        </div>
+      </div>
+
+      <div class="card-text-pane">
+        <div class="step-tab-chip">📅 Tab 2 — Schedule</div>
+        <div class="step-title">A Visual Weekly Timeline for Your Event</div>
+        <div class="step-intro">
+          The <strong>Schedule tab</strong> shows a weekly calendar grid for the currently selected event. You can plan every activity, set exact times, assign colors, and instantly see if any two activities overlap.
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-icon">📆</div>
+            <div class="feature-text">
+              <div class="feature-title">Week Navigation</div>
+              <div class="feature-desc">Use the <strong>← Prev</strong> and <strong>Next →</strong> arrows at the top to move between weeks. The column headers show the actual date for each day, keeping your planning anchored to real calendar dates.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">＋</div>
+            <div class="feature-text">
+              <div class="feature-title">Adding Activities</div>
+              <div class="feature-desc">Click any empty time slot on the grid to open the <strong>Add Activity</strong> modal. Set the title, start and end time, day, color, and any notes. The activity block immediately appears in the grid at the correct position and height based on its duration.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">✏️</div>
+            <div class="feature-text">
+              <div class="feature-title">Editing & Deleting</div>
+              <div class="feature-desc">Click any existing activity block to open its <strong>Edit</strong> modal. Change the title, time range, day, color, or notes. You can also delete the activity directly from the edit modal using the Delete button.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⚠️</div>
+            <div class="feature-text">
+              <div class="feature-title">Conflict Detection</div>
+              <div class="feature-desc">If two or more activities on the same day overlap in time, EmGo highlights them in <strong>red</strong> and increments the <em>Conflicts</em> counter in the Overview sidebar. Resolve conflicts by adjusting start/end times so activities no longer overlap.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⏱</div>
+            <div class="feature-text">
+              <div class="feature-title">Adjustable Time Range</div>
+              <div class="feature-desc">The grid spans from <strong>6 AM to 12 AM</strong> by default. The time range adapts to your activities — early morning or late-night events are fully supported. Time labels on the left use a clean 12-hour AM/PM format.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tips-box">
+          <div class="tips-box-icon">💡</div>
+          <div class="tips-box-text"><strong>Pro tip:</strong> The <em>Activities</em> and <em>Conflicts</em> counts in the Overview sidebar are live. Keep an eye on them as you build out your schedule to spot issues early.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       STEP 3 — Venue Tab
+  ══════════════════════════════════════════════ -->
+  <div class="step-card" id="step-2">
+    <div class="card-inner">
+      <div class="card-img-pane">
+        <div class="img-placeholder">
+          <!-- ★ REPLACE: <img class="img-slot" src="screenshots/venue-tab.png" alt="Venue Tab"> -->
+         <img class="img-slot" src="images/Venue.png" alt="Events Tab">
+          <div class="img-placeholder-icon"></div>
+          <div class="img-placeholder-label">Place your Venue Tab<br>screenshot here</div>
+        </div>
+      </div>
+
+      <div class="card-text-pane">
+        <div class="step-tab-chip">🗺 Tab 3 — Venue</div>
+        <div class="step-title">Design Your Floor Plan on a Live Canvas</div>
+        <div class="step-intro">
+          The <strong>Venue tab</strong> is a full interactive canvas editor where you design a visual layout of your event space. Place rooms, tables, stages, walls, and more — then organize them across multiple floor layers.
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-icon">▭</div>
+            <div class="feature-text">
+              <div class="feature-title">Element Palette</div>
+              <div class="feature-desc">Pick from 8 built-in elements in the right panel: <strong>Room, Table, Stage, Wall, Entry, WC, Exit,</strong> and <strong>Custom Shape</strong>. Click an element to select its tool, then click and drag on the canvas to draw it. Each element has a preset size that you can resize after placing.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">↖</div>
+            <div class="feature-text">
+              <div class="feature-title">Select, Move & Resize</div>
+              <div class="feature-desc">Switch to the <strong>Select</strong> tool (<span class="key">V</span>) to drag elements around. Click an element to show resize and rotate handles. Drag any corner handle to resize, or the circular handle at the top to rotate. Hold <span class="key">Ctrl</span> and click multiple elements to select them as a group.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⊞</div>
+            <div class="feature-text">
+              <div class="feature-title">Layers System</div>
+              <div class="feature-desc">Use <strong>Layers</strong> (right panel, top) to organize multi-floor venues. Add a new layer with the <strong>+</strong> button. Each layer can be shown or hidden independently, so you can focus on one floor at a time without visual clutter.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🎨</div>
+            <div class="feature-text">
+              <div class="feature-title">Colors & Custom Elements</div>
+              <div class="feature-desc">Select any color from the 8-color palette before placing an element, or use the <strong>Custom</strong> color picker for any hex value. Use <strong>✦ Custom Shape</strong> to draw freeform polygons, rectangles, lines, or circles. Use <strong>🖼 Custom Element</strong> to upload an image and place it on the canvas.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⬇</div>
+            <div class="feature-text">
+              <div class="feature-title">Zoom, Grid & Export</div>
+              <div class="feature-desc">Zoom in/out with the <strong>− / +</strong> buttons or scroll wheel. Press <strong>⊡ Fit</strong> to reset the view. Toggle the alignment grid with <span class="key">G</span> for precise placement. When your layout is ready, click <strong>⬇ Export</strong> to save it as an image file.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tips-box">
+          <div class="tips-box-icon">⌨️</div>
+          <div class="tips-box-text"><strong>Keyboard shortcuts:</strong> <span class="key">V</span> Select · <span class="key">P</span> Pan · <span class="key">R</span> Room · <span class="key">T</span> Table · <span class="key">S</span> Stage · <span class="key">W</span> Wall · <span class="key">G</span> Grid · <span class="key">Ctrl+Z</span> Undo · <span class="key">Ctrl+C/V</span> Copy/Paste · <span class="key">Del</span> Delete · <span class="key">Q</span> Pan/Select</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       STEP 4 — Map Tab
+  ══════════════════════════════════════════════ -->
+  <div class="step-card" id="step-3">
+    <div class="card-inner">
+      <div class="card-img-pane">
+        <div class="img-placeholder">
+          <!-- ★ REPLACE: <img class="img-slot" src="screenshots/map-tab.png" alt="Map Tab"> -->
+          <img class="img-slot" src="images/Map.png" alt="Events Tab">
+          <div class="img-placeholder-icon"></div>
+          <div class="img-placeholder-label">Place your Map Tab<br>screenshot here</div>
+        </div>
+      </div>
+
+      <div class="card-text-pane">
+        <div class="step-tab-chip">📍 Tab 4 — Map</div>
+        <div class="step-title">Pin Real Locations on a Live Interactive Map</div>
+        <div class="step-intro">
+          The <strong>Map tab</strong> uses an interactive Leaflet map to let you drop, name, and share geographic pins for your event locations. Each pin is tied to your active event and can be navigated to via QR code or share code.
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-icon">📌</div>
+            <div class="feature-text">
+              <div class="feature-title">Adding & Managing Pins</div>
+              <div class="feature-desc">Click anywhere on the map to drop a new pin, or use the <strong>Add Pin</strong> button in the side panel. Give each pin a name, address, color, and optional event association. Pins appear as color-coded markers on the map and are listed in the panel.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📷</div>
+            <div class="feature-text">
+              <div class="feature-title">QR Code Scanner(For Mobile)</div>
+              <div class="feature-desc">Tap the <strong>Scan QR</strong> button to open your device camera. Point it at any EmGo-generated QR code, and the map will instantly fly to that location and open a popup with the pin's name, address, and share code. Only QR codes generated by EmGo are recognised.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">#️⃣</div>
+            <div class="feature-text">
+              <div class="feature-title">Enter Share Code(For Mobile)</div>
+              <div class="feature-desc">Each pin has a unique short alphanumeric <strong>Share Code</strong>. Tap <strong>Enter Code</strong>, type the code (e.g. <em>AB12C</em>), and the map flies directly to that pin. This is useful when sharing a location verbally or in a message, without needing the full QR.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🗺</div>
+            <div class="feature-text">
+              <div class="feature-title">Map Navigation</div>
+              <div class="feature-desc">Pan by clicking and dragging. Zoom with scroll, pinch, or the +/− controls. Click any pin marker to open a popup showing its name, address, and share code. The map automatically centers on your active event's pins when you switch events.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔗</div>
+            <div class="feature-text">
+              <div class="feature-title">Share & Export</div>
+              <div class="feature-desc">Generate a QR code for any pin using the <strong>QR</strong> button in the pin list. The QR code encodes the pin's exact coordinates, name, address, and share code — anyone with EmGo can scan it to jump straight to that location.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tips-box">
+          <div class="tips-box-icon">💡</div>
+          <div class="tips-box-text"><strong>Pro tip:</strong> Pin codes are case-insensitive. You can share them in all-caps or lowercase — EmGo normalises them automatically when resolving a location.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       STEP 5 — Attendees Tab
+  ══════════════════════════════════════════════ -->
+  <div class="step-card" id="step-4">
+    <div class="card-inner">
+      <div class="card-img-pane">
+        <div class="img-placeholder">
+          <!-- ★ REPLACE: <img class="img-slot" src="screenshots/attendees-tab.png" alt="Attendees Tab"> -->
+        <img class="img-slot" src="images/Attendees.png" alt="Events Tab">
+          <div class="img-placeholder-icon"></div>
+          <div class="img-placeholder-label">Place your Attendees Tab<br>screenshot here</div>
+        </div>
+      </div>
+
+      <div class="card-text-pane">
+        <div class="step-tab-chip">👥 Tab 5 — Attendees</div>
+        <div class="step-title">Manage Everyone Coming to Your Event</div>
+        <div class="step-intro">
+          The <strong>Attendees tab</strong> is your guest list manager. Add, edit, and track every person attending the active event — with roles, statuses, and contact info all in one place.
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-icon">➕</div>
+            <div class="feature-text">
+              <div class="feature-title">Adding Attendees</div>
+              <div class="feature-desc">Click <strong>+ Add Attendee</strong> to open the Add modal. Fill in the person's first name, last name, email address, role (e.g. Speaker, Organizer, Guest, Staff), and status (Confirmed or Pending). All fields are saved to the active event's attendee list.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">✏️</div>
+            <div class="feature-text">
+              <div class="feature-title">Editing & Removing</div>
+              <div class="feature-desc">Click any attendee row or card to open the <strong>Edit</strong> modal. Update their details or change their status as things evolve — for instance, moving someone from Pending to Confirmed after they respond. Use the Delete button to remove them from the list.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔍</div>
+            <div class="feature-text">
+              <div class="feature-title">Search & Filter</div>
+              <div class="feature-desc">Use the search bar to find attendees by name or email. Filter chips let you view only <strong>Confirmed</strong>or <strong>Pending</strong> attendees at a glance — handy for following up with people who haven't confirmed yet.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🏷</div>
+            <div class="feature-text">
+              <div class="feature-title">Roles & Statuses</div>
+              <div class="feature-desc">Roles help you categorise attendees by function: <strong>Organizer, Speaker, Staff, Guest,</strong> etc. Statuses — <strong>Confirmed or Pending</strong>. The total confirmed attendee count is reflected in the Overview sidebar.</div>
+            </div>
+          </div>
+          <div class="feature-item">
+         <!--   <div class="feature-icon">📊</div>
+            <div class="feature-text">
+              <div class="feature-title">Live Count in Overview</div>
+              <div class="feature-desc">The <strong>Attendees</strong> counter in the sidebar Overview updates in real time as you add, confirm, or remove people. This number shows total attendees in the list for the active event, so you always know your headcount at a glance from any tab.</div>
+            </div>-->
+          </div>
+        </div>
+
+        <div class="tips-box">
+          <div class="tips-box-icon">💡</div>
+          <div class="tips-box-text"><strong>Pro tip:</strong> Each tab — Schedule, Venue, Map, and Attendees — is always scoped to the <em>active event</em> selected in the Events tab. Switch events from the left sidebar or the Events tab cards.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       STEP 6 — Finish / CTA
+  ══════════════════════════════════════════════ -->
+  <div class="step-card" id="step-5">
+    <div class="card-inner" style="align-items:stretch;">
+      <div class="finish-cta">
+        <div class="finish-icon">🎉</div>
+        <div class="finish-title">You're all set to use EmGo!</div>
+        <div class="finish-sub">
+          You now know how every tab works — from creating events and building schedules, to designing your venue layout, pinning real-world locations, and managing your guest list. Time to plan your first event.
+        </div>
+        <a class="finish-btn" href="index.html">
+          Go to Events &nbsp;→
+        </a>
+        <button class="btn-skip" onclick="goTo(0)">↩ Restart tutorial</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Footer navigation ══ -->
+  <footer class="tut-footer">
+    <button class="btn-nav" id="btnPrev" onclick="navigate(-1)" disabled>← Previous</button>
+    <button class="btn-skip" id="btnSkip" onclick="goTo(5)">Skip</button>
+    <button class="btn-nav btn-nav-next" id="btnNext" onclick="navigate(1)">Next →</button>
+  </footer>
+
+<!-- ══ Lightbox ══ -->
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lbImg" src="" alt="Full view">
+</div>
+
+</div><!-- /.tut-shell -->
+
+<script>
+let current = 0;
+const TOTAL = 5; // 0–4 are content steps; 5 is the finish card
+
+function goTo(index, dir) {
+  const cards = document.querySelectorAll('.step-card');
+  const dots  = document.querySelectorAll('.step-dot');
+
+  // Determine animation direction
+  const direction = dir !== undefined ? dir : (index > current ? 1 : -1);
+  const animClass = direction > 0 ? 'slide-in-right' : 'slide-in-left';
+
+  cards[current].classList.remove('active');
+  current = index;
+  const card = cards[current];
+  card.classList.add('active');
+
+  // Animate
+  card.classList.remove('slide-in-right', 'slide-in-left');
+  void card.offsetWidth; // force reflow
+  card.classList.add(animClass);
+
+  // Dots
+  dots.forEach((d, i) => {
+    d.classList.remove('active', 'done');
+    if (i < current) d.classList.add('done');
+    if (i === current) d.classList.add('active');
+  });
+
+  // Step counter (only show for content steps)
+  const stepNum = document.getElementById('stepNum');
+  stepNum.textContent = Math.min(current + 1, TOTAL);
+
+  // Buttons
+  document.getElementById('btnPrev').disabled = current === 0;
+  document.getElementById('btnNext').style.display = current === TOTAL ? 'none' : '';
+  document.getElementById('btnSkip').style.display = current === TOTAL ? 'none' : '';
+
+  if (current === TOTAL) {
+    document.getElementById('btnPrev').disabled = false;
+  }
+}
+
+function navigate(dir) {
+  const next = current + dir;
+  if (next < 0 || next > TOTAL) return;
+  goTo(next, dir);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') navigate(1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   navigate(-1);
+});
+
+// Touch swipe
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 50) navigate(dx < 0 ? 1 : -1);
+}, { passive: true });
+
+// ── Lightbox ──────────────────────────────
+const lb    = document.getElementById('lightbox');
+const lbImg = document.getElementById('lbImg');
+
+function openLightbox(src) {
+  lbImg.src = src;
+  lb.classList.add('open');
+}
+function closeLightbox() {
+  lb.classList.remove('open');
+  lbImg.src = '';
+}
+
+lb.addEventListener('click', closeLightbox);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+// Make every img inside a card-img-pane clickable
+document.querySelectorAll('.card-img-pane').forEach(pane => {
+  pane.addEventListener('click', function() {
+    const img = this.querySelector('img');
+    if (img) openLightbox(img.src);
+  });
+});
+
+// Init
+goTo(0, 1);
+</script>
+</body>
+</html>
